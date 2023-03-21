@@ -176,7 +176,7 @@ inline void InvShiftRows(unsigned char *mat)
 }
 
 // Process 16 bytes in 4x4 matrix with unsigned chars. Make GF(2^8) operations
-void MixColumns(unsigned char *mat) 
+inline void MixColumns(unsigned char *mat) 
 {
     unsigned char a, b, c, d;
     // Mix every four columns
@@ -200,7 +200,7 @@ void MixColumns(unsigned char *mat)
 }
 
 // Process 16 bytes in 4x4 matrix with unsigned chars. Make GF(2^8) operations
-void InvMixColumns(unsigned char *mat) 
+inline void InvMixColumns(unsigned char *mat) 
 {
     unsigned char a, b, c, d;
     // Mix every four columns
@@ -224,7 +224,7 @@ void InvMixColumns(unsigned char *mat)
 }
 
 // Process 16 bytes in 4x4 matrix with unsigned chars. Kreate key shedule
-std::string KeyExpansion(const std::string& key)
+inline std::string KeyExpansion(const std::string& key)
 {
     std::string KeyShedule = key;
 
@@ -269,6 +269,7 @@ std::string KeyExpansion(const std::string& key)
     return KeyShedule;
 }
 
+// This function simply does a bitwise xor of each element of the string mat1 with the corresponding element of the string mat2
 std::string AddRoundKey(std::string mat1, std::string mat2) 
 {
     std::string xoredString;
