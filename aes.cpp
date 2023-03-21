@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 
+// Matrix for replacing two-byte words in a function SubBytes
 const unsigned char SBox[64][64] = { 
     {0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76},
     {0xca, 0x82, 0xc9, 0x7d, 0xfa, 0x59, 0x47, 0xf0, 0xad, 0xd4, 0xa2, 0xaf, 0x9c, 0xa4, 0x72, 0xc0},
@@ -20,6 +21,7 @@ const unsigned char SBox[64][64] = {
     {0x8c, 0xa1, 0x89, 0x0d, 0xbf, 0xe6, 0x42, 0x68, 0x41, 0x99, 0x2d, 0x0f, 0xb0, 0x54, 0xbb, 0x16}
 };
 
+// Matrix for replacing two-byte words in a function InvSubBytes
 const unsigned char InvSBox[64][64] = {
     {0x52, 0x09, 0x6a, 0xd5, 0x30, 0x36, 0xa5, 0x38, 0xbf, 0x40, 0xa3, 0x9e, 0x81, 0xf3, 0xd7, 0xfb},
     {0x7c, 0xe3, 0x39, 0x82, 0x9b, 0x2f, 0xff, 0x87, 0x34, 0x8e, 0x43, 0x44, 0xc4, 0xde, 0xe9, 0xcb},
@@ -39,6 +41,7 @@ const unsigned char InvSBox[64][64] = {
     {0x17, 0x2b, 0x04, 0x7e, 0xba, 0x77, 0xd6, 0x26, 0xe1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0c, 0x7d}
 };
 
+// Matrix for creating a key schedule
 const unsigned char Rcon[10][4] = {
     {0x01, 0x00, 0x00, 0x00},
     {0x02, 0x00, 0x00, 0x00},
@@ -52,7 +55,7 @@ const unsigned char Rcon[10][4] = {
     {0x36, 0x00, 0x00, 0x00},
 };
 
-// Convert uint32 to string with hex form of this number
+// Convert int to string with hex form of this number
 template <class T>
 std::string IntToHexForm(T a)
 {
@@ -66,35 +69,44 @@ std::string IntToHexForm(T a)
         int highByte = a % 16;
         a /= 16;
 
-        if (highByte > 9)
-        {
-            if (highByte == 10) res += "a";
-            if (highByte == 11) res += "b";
-            if (highByte == 12) res += "c";
-            if (highByte == 13) res += "d";
-            if (highByte == 14) res += "e";
-            if (highByte == 15) res += "f";
-        }
-        else
-            res += std::to_string(highByte);
-
         if (lowByte > 9)
-        {
-            if (lowByte == 10) res += "a";
-            if (lowByte == 11) res += "b";
-            if (lowByte == 12) res += "c";
-            if (lowByte == 13) res += "d";
-            if (lowByte == 14) res += "e";
-            if (lowByte == 15) res += "f";
-        }
+            res = std::string(1, 'a' + lowByte - 10) + res;
         else
-            res += std::to_string(lowByte);
+            res = std::to_string(lowByte) + res;
+
+        if (highByte > 9)
+            res = std::string(1, 'a' + highByte - 10) + res;
+        else
+            res = std::to_string(highByte) + res;
     }
 
     return res;
 }
 
-// Galois Field (256) Multiplication of two Bytes
+// Convert hex to plain text
+std::string StringWithHexToNormalString(const std::string& str)
+{
+    if (str.length() % 2 != 0)  return "";
+
+    std::string res;
+    unsigned char hi, low;
+    for (int i = 0; i < str.length(); i += 2)
+    {
+        if (str[i] >= '0' && str[i] <= '9') hi = str[i] - '0';
+        if (str[i] >= 'a' && str[i] <= 'f') hi = str[i] - 'a' + 10;
+        if (str[i] >= 'A' && str[i] <= 'F') hi = str[i] - 'A' + 10;
+
+        if (str[i + 1] >= '0' && str[i + 1] <= '9') low = str[i + 1] - '0';
+        if (str[i + 1] >= 'a' && str[i + 1] <= 'f') low = str[i + 1] - 'a' + 10;
+        if (str[i + 1] >= 'A' && str[i + 1] <= 'F') low = str[i + 1] - 'A' + 10;
+
+        res += hi*16 + low;
+    }
+    return res;
+}
+
+
+// Galois Field (256) multiplication of two bytes
 unsigned char GaloisMul(unsigned char a, unsigned char b)
 {
     unsigned char p = 0;
@@ -117,21 +129,21 @@ unsigned char GaloisMul(unsigned char a, unsigned char b)
     return p;
 }
 
-// Process 16 unsigned chars. Change unsigned chars to chars in const SBox matrix
+// Process 16 bytes in 4x4 matrix with unsigned chars. Change unsigned chars to chars from const SBox matrix
 inline void SubBytes(unsigned char *mat)
 {
     for (int i = 0; i < 16; i++)
         mat[i] = SBox[mat[i] / 16][mat[i] % 16];
 }
 
-// Process 16 unsigned chars. Change unsigned chars to chars in const SBox matrix
+// Process 16 bytes in 4x4 matrix with unsigned chars. Change unsigned chars to chars from const InvSBox matrix
 inline void InvSubBytes(unsigned char *mat)
 {
     for (int i = 0; i < 16; i++)
         mat[i] = InvSBox[mat[i] / 16][mat[i] % 16];
 }
 
-// Process 16 unsigned chars. Circular shift 3 last lines to 1, 2, 3.
+// Process 16 bytes in 4x4 matrix with unsigned chars. Circular shift of elements to the left. 0 line << 0. 1 line << 1. 2 line << 2. 3 line << 3.
 inline void ShiftRows(unsigned char *mat)
 {
     // Second line shifts on 1 to left
@@ -147,7 +159,7 @@ inline void ShiftRows(unsigned char *mat)
     mat[15] = mat[14]; mat[14] = mat[13]; mat[13] = mat[12]; mat[12] = tmp1;
 }
 
-// Process 16 unsigned chars. Circular shift 3 last lines to 1, 2, 3.
+// Process 16 bytes in 4x4 matrix with unsigned chars. Circular shift of elements to the right. 0 line >> 0. 1 line >> 1. 2 line >> 2. 3 line >> 3.
 inline void InvShiftRows(unsigned char *mat)
 {
     // Second line shifts on 1 to right
@@ -163,12 +175,18 @@ inline void InvShiftRows(unsigned char *mat)
     mat[12] = mat[13]; mat[13] = mat[14]; mat[14] = mat[15]; mat[15] = tmp1;
 }
 
-// Process 16 unsigned chars matrix state. Make GF(2^8) operations
+// Process 16 bytes in 4x4 matrix with unsigned chars. Make GF(2^8) operations
 void MixColumns(unsigned char *mat) 
 {
     unsigned char a, b, c, d;
+    // Mix every four columns
     for (int i = 0; i < 4; i++)
     {
+        // Transformation matrix:
+        // 2 3 1 1
+        // 1 2 3 1
+        // 1 1 2 3
+        // 3 1 1 2
         a = GaloisMul(2, mat[i]) ^ GaloisMul(3, mat[4 + i]) ^ mat[8 + i] ^ mat[12 + i];
         b = mat[i] ^ GaloisMul(2, mat[4 + i]) ^ GaloisMul(3, mat[8 + i]) ^ mat[12 + i];
         c = mat[i] ^ mat[4 + i] ^ GaloisMul(2, mat[8 + i]) ^ GaloisMul(3, mat[12 + i]);
@@ -181,12 +199,18 @@ void MixColumns(unsigned char *mat)
     }
 }
 
-// Process 16 unsigned chars matrix state. Make GF(2^8) operations
+// Process 16 bytes in 4x4 matrix with unsigned chars. Make GF(2^8) operations
 void InvMixColumns(unsigned char *mat) 
 {
     unsigned char a, b, c, d;
+    // Mix every four columns
     for (int i = 0; i < 4; i++)
     {
+        // Transformation matrix:
+        // 14 11 13 9
+        // 9 14 11 13
+        // 13 9 11 13
+        // 11 13 9 14
         a = GaloisMul(14, mat[i]) ^ GaloisMul(11, mat[4 + i]) ^ GaloisMul(13, mat[8 + i]) ^ GaloisMul(9, mat[12 + i]);
         b = GaloisMul(9, mat[i]) ^ GaloisMul(14, mat[4 + i]) ^ GaloisMul(11, mat[8 + i]) ^ GaloisMul(13, mat[12 + i]);
         c  = GaloisMul(13, mat[i]) ^ GaloisMul(9, mat[4 + i]) ^ GaloisMul(14, mat[8 + i]) ^ GaloisMul(11, mat[12 + i]);
@@ -199,8 +223,8 @@ void InvMixColumns(unsigned char *mat)
     }
 }
 
-// Process 16 chars string. Make key shedule
-std::string KeyExpansion(std::string key)
+// Process 16 bytes in 4x4 matrix with unsigned chars. Kreate key shedule
+std::string KeyExpansion(const std::string& key)
 {
     std::string KeyShedule = key;
 
@@ -367,59 +391,14 @@ std::string AES_Decrypt(const std::string& data, const std::string& key)
     return res;
 }
 
-std::string StringWithHexToNormalString(const std::string& str)
-{
-    if (str.length() % 2 != 0)  return "";
-
-    std::string res;
-    unsigned char hi, low;
-    for (int i = 0; i < str.length(); i += 2)
-    {
-        if (str[i] == '0') hi = 0;
-        if (str[i] == '1') hi = 1;
-        if (str[i] == '2') hi = 2;
-        if (str[i] == '3') hi = 3;
-        if (str[i] == '4') hi = 4;
-        if (str[i] == '5') hi = 5;
-        if (str[i] == '6') hi = 6;
-        if (str[i] == '7') hi = 7;
-        if (str[i] == '8') hi = 8;
-        if (str[i] == '9') hi = 9;
-
-        if (str[i] == 'a' || str[i] == 'A') hi = 10;
-        if (str[i] == 'b' || str[i] == 'B') hi = 11;
-        if (str[i] == 'c' || str[i] == 'C') hi = 12;
-        if (str[i] == 'd' || str[i] == 'D') hi = 13;
-        if (str[i] == 'e' || str[i] == 'E') hi = 14;
-        if (str[i] == 'f' || str[i] == 'F') hi = 15;
-
-        if (str[i + 1] == '0') low = 0;
-        if (str[i + 1] == '1') low = 1;
-        if (str[i + 1] == '2') low = 2;
-        if (str[i + 1] == '3') low = 3;
-        if (str[i + 1] == '4') low = 4;
-        if (str[i + 1] == '5') low = 5;
-        if (str[i + 1] == '6') low = 6;
-        if (str[i + 1] == '7') low = 7;
-        if (str[i + 1] == '8') low = 8;
-        if (str[i + 1] == '9') low = 9;
-
-        if (str[i + 1] == 'a' || str[i + 1] == 'A') low = 10;
-        if (str[i + 1] == 'b' || str[i + 1] == 'B') low = 11;
-        if (str[i + 1] == 'c' || str[i + 1] == 'C') low = 12;
-        if (str[i + 1] == 'd' || str[i + 1] == 'D') low = 13;
-        if (str[i + 1] == 'e' || str[i + 1] == 'E') low = 14;
-        if (str[i + 1] == 'f' || str[i + 1] == 'F') low = 15;
-
-        res += hi*16 + low;
-    }
-    return res;
-}
-
 int main()
 {
-    std::string data = "lollollollollolH";
-    std::string key = "abcdabcdabcdabcd";
+    // To-Do 
+    // 1. functions to work with base64
+
+    // Site to check http://aes.online-domain-tools.com/
+    std::string data = "aktoaktoaktoakto";
+    std::string key = "akakakakakakakak";
     std::string encryptedData = AES_Encrypt(data, key);
 
     for (auto it : encryptedData) 
@@ -427,6 +406,6 @@ int main()
     
     std::cout << std::endl;
 
-    std::string decryptedData = AES_Decrypt(StringWithHexToNormalString("93ed6702d47b821b5f3139d7818f3db2"), key);
+    std::string decryptedData = AES_Decrypt(StringWithHexToNormalString("ae56671cdcf8b3068259ae8bf8bda940"), key);
     std::cout << decryptedData << std::endl;
 }
