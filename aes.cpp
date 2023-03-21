@@ -270,123 +270,94 @@ inline std::string KeyExpansion(const std::string& key)
 }
 
 // This function simply does a bitwise xor of each element of the string mat1 with the corresponding element of the string mat2
-std::string AddRoundKey(std::string mat1, std::string mat2) 
+inline void AddRoundKey(unsigned char* state, const std::string& key) 
 {
-    std::string xoredString;
-
-    for (int i = 0; i < 16; i++)
-        xoredString += (unsigned char)(mat1[i] ^ mat2[i]);
-    
-    return xoredString;
-}
-
-// Process 16 chars string
-std::string AES_EncryptStep(const std::string& data, bool isMixColumns = true)
-{
-    unsigned char state[4][4];
-
-    // Save data from string to state matrix
     for (int i = 0; i < 4; i++)
         for (int j = 0; j < 4; j++)
-            state[j][i] = data[i * 4 + j];
-
-    // Change unsigned chars from matrix to const SBox table
-    SubBytes(&state[0][0]);
-    // Change unsigned chars from matrix to const SBox table
-    ShiftRows(&state[0][0]);
-
-    if(isMixColumns)
-        MixColumns(&state[0][0]);
-
-    std::string res;
-    for (int i = 0; i < 4; i++)
-        for (int j = 0; j < 4; j++)
-            res += state[j][i];
-
-
-    return res;
+            state[j * 4 + i] = state[j * 4 + i] ^ (unsigned char)key[i * 4 + j];
 }
 
-// Now length must be multiple of the number 16
+// Encryption function. The length of the data to be encrypted must be a multiple of 16. The key length must be 16. Padding is not yet available
 std::string AES_Encrypt(const std::string& data, const std::string& key)
 {
     if (data.length() % 16 != 0 || key.length() != 16)
         return "";
 
     std::string keyShedule = KeyExpansion(key);
-
     std::string res;
+
     for(int i = 0; i < data.length() / 16; i++)
     {
-        std::string encryptedData = AddRoundKey(data, key);
+        unsigned char state[4][4];
 
-        std::string tmp;
+        // Save data from string to state matrix
+        for (int j = 0; j < 4; j++)
+            for (int k = 0; k < 4; k++)
+                state[k][j] = data[i * 16 + j * 4 + k];
+
+        AddRoundKey(&state[0][0], key);
         for (int j = 1; j < 10; j++)
         {
-            tmp = AES_EncryptStep(encryptedData);
-            encryptedData = AddRoundKey(tmp, keyShedule.substr(j*16, 16));
+            SubBytes(&state[0][0]);
+            ShiftRows(&state[0][0]);
+            MixColumns(&state[0][0]);
+            AddRoundKey(&state[0][0], keyShedule.substr(j * 16, 16));
         }
 
-        tmp = AES_EncryptStep(encryptedData, false);
-        encryptedData = AddRoundKey(tmp, keyShedule.substr(10*16, 16));
-        res += encryptedData;
+        SubBytes(&state[0][0]);
+        ShiftRows(&state[0][0]);
+        AddRoundKey(&state[0][0], keyShedule.substr(keyShedule.length() - 16, 16));
+
+        // Save data from state matrix to string
+        std::string stateRes;
+        for (int i = 0; i < 4; i++)
+            for (int j = 0; j < 4; j++)
+                stateRes += state[j][i];
+
+        res += stateRes;
     }
 
     return res;
 }
 
-// Process 16 chars string
-std::string AES_DecryptStep(const std::string& data, bool isMixColumns = false)
-{
-    unsigned char state[4][4];
-
-    // Save data from string to state matrix
-    for (int i = 0; i < 4; i++)
-        for (int j = 0; j < 4; j++)
-            state[j][i] = data[i * 4 + j];
-
-    if(isMixColumns)
-        InvMixColumns(&state[0][0]);
-    else
-    {
-        // Change unsigned chars from matrix to const SBox table
-        InvShiftRows(&state[0][0]);
-        // Change unsigned chars from matrix to const SBox table
-        InvSubBytes(&state[0][0]);
-    }
-
-    std::string res;
-    for (int i = 0; i < 4; i++)
-        for (int j = 0; j < 4; j++)
-            res += state[j][i];
-
-    return res;
-}
-
-// Now length must be multiple of the number 16
+// Encryption function. The length of the data to be encrypted must be a multiple of 16. The key length must be 16. Padding is not yet available
 std::string AES_Decrypt(const std::string& data, const std::string& key)
 {
-    if (data.length() % 16 != 0 || key.length() != 16)
-        return "";
+    if (data.length() % 16 != 0 || key.length() != 16) return "";
 
-    std::string res;
     std::string keyShedule = KeyExpansion(key);
+    std::string res;
 
     for(int i = 0; i < data.length() / 16; i++)
     {
-        std::string decryptedData = AddRoundKey(data, keyShedule.substr(keyShedule.length() - 16));
+        unsigned char state[4][4];
 
-        std::string tmp1, tmp2;
+        // Save data from string to state matrix
+        for (int j = 0; j < 4; j++)
+            for (int k = 0; k < 4; k++)
+                state[k][j] = data[i * 16 + j * 4 + k];
+
+        AddRoundKey(&state[0][0], keyShedule.substr(keyShedule.length() - 16));
+
         for (int j = 1; j < 10; j++)
         {
-            tmp1 = AES_DecryptStep(decryptedData);
-            tmp2 = AddRoundKey(tmp1, keyShedule.substr((10 - j) * 16, 16));
-            decryptedData = AES_DecryptStep(tmp2, true);
+            InvShiftRows(&state[0][0]);
+            InvSubBytes(&state[0][0]);
+            AddRoundKey(&state[0][0], keyShedule.substr((10 - j) * 16, 16));
+            InvMixColumns(&state[0][0]);
         }
 
-        tmp2 = AES_DecryptStep(decryptedData);
-        decryptedData = AddRoundKey(tmp2, keyShedule.substr(0, 16));
-        res += decryptedData;
+        InvShiftRows(&state[0][0]);
+        InvSubBytes(&state[0][0]);
+        AddRoundKey(&state[0][0], key);
+
+        // Save data from state matrix to string
+        std::string stateRes;
+        for (int i = 0; i < 4; i++)
+            for (int j = 0; j < 4; j++)
+                stateRes += state[j][i];
+
+        res += stateRes;
     }
 
     return res;
@@ -396,9 +367,12 @@ int main()
 {
     // To-Do 
     // 1. functions to work with base64
-
+    // 2. 192, 256 modes
+    // 3. CBC
+    // 4. Key and data padding
+    
     // Site to check http://aes.online-domain-tools.com/
-    std::string data = "aktoaktoaktoakto";
+    std::string data = "aktoaktoaktoaktoagdeagdeagdeagde";
     std::string key = "akakakakakakakak";
     std::string encryptedData = AES_Encrypt(data, key);
 
@@ -407,6 +381,6 @@ int main()
     
     std::cout << std::endl;
 
-    std::string decryptedData = AES_Decrypt(StringWithHexToNormalString("ae56671cdcf8b3068259ae8bf8bda940"), key);
+    std::string decryptedData = AES_Decrypt(StringWithHexToNormalString("ae56671cdcf8b3068259ae8bf8bda940176395e0760c88d40a29b74a5c240ddf"), key);
     std::cout << decryptedData << std::endl;
 }
