@@ -55,6 +55,21 @@ const unsigned char Rcon[10][4] = {
     {0x36, 0x00, 0x00, 0x00},
 };
 
+// Enum with availavble key sizes. 128 bit, 192 bit, 256 bit.
+enum AES_KeySize
+{
+    AES_128 = 16,
+    AES_192 = 24,
+    AES_256 = 32
+};
+
+// Enum with available cypher modes. ECB and CBC
+enum AES_Mode
+{
+    ECB,
+    CBC
+};
+
 // Convert int to string with hex form of this number
 template <class T>
 std::string IntToHexForm(T a)
@@ -118,20 +133,37 @@ inline std::string XorString(const std::string& str1, const std::string& str2)
     return res;
 } 
 
-// Enum with availavble key sizes. 128 bit, 192 bit, 256 bit.
-enum AES_KeySize
+// Add PKCS#7 padding to data string
+inline std::string AddPaddingToData(std::string data)
 {
-    AES_128 = 16,
-    AES_192 = 24,
-    AES_256 = 32
-};
+    std::string source = data.substr(((data.length() >> 4) << 4));
+    std::string res;
 
-// Enum with available cypher modes. ECB and CBC
-enum AES_Mode
+    for (int i = 0; i < (16 - source.length()); i++)
+        res += (16 - source.length());
+    
+    return data + res;
+}
+
+// Add PKCS#7 padding to key string
+inline std::string AddPaddingToKey(AES_KeySize keySize, std::string key)
 {
-    ECB,
-    CBC
-};
+    if (key.length() == keySize) return key;
+    if (key.length() > keySize) return key.substr(0, keySize);
+
+    std::string res;
+
+    for (int i = 0; i < (keySize - key.length()); i++)
+        res += (keySize - key.length());
+    
+    return key + res;
+}
+
+// Remove PKCS#7 padding from string
+inline std::string RemovePadding(std::string str)
+{
+    return str.substr(0, str.length() - (unsigned char)str[str.length() - 1]);
+}
 
 // Galois Field (256) multiplication of two bytes
 unsigned char GaloisMul(unsigned char a, unsigned char b)
@@ -322,10 +354,24 @@ inline void AddRoundKey(unsigned char* state, const std::string& key)
             state[j * 4 + i] = state[j * 4 + i] ^ (unsigned char)key[i * 4 + j];
 }
 
-// Encryption function. The length of the data to be encrypted must be a multiple of 16. The key length must be 16. Padding is not yet available
-std::string AES_Encrypt(AES_KeySize keySize, AES_Mode aes_mode, const std::string& data, std::string key, std::string IV = "")
+// Encryption function. The data and key will be aligned using the algorithm PKCS#7
+// If the key is greater than the value specified in keySize, the first keySize bits or keySize/8 characters will be taken from it
+// If the CBC mode used IV must be set
+std::string AES_Encrypt(AES_KeySize keySize, AES_Mode aes_mode, std::string data, std::string key, std::string IV = "")
 {
-    if (data.length() % 16 != 0 || key.length() != keySize || (aes_mode == CBC && IV.length() != 16)) return "";
+    if (data.length() == 0 || key.length() == 0 || (aes_mode == CBC && IV.length() == 0)) 
+    {
+        if (data.length() == 0)
+            std::cerr << "In AES_Encrypt function: Data length cannot be zero" << std::endl;
+        
+        if (key.length() == 0)
+            std::cerr << "In AES_Encrypt function: Key length cannot be zero" << std::endl;
+
+        if (aes_mode == CBC && IV.length() == 0)
+            std::cerr << "In AES_Encrypt function: IV(initialization vector) length cannot be zero" << std::endl;
+
+        throw;
+    }
 
     int roundsCount;
     switch (keySize)
@@ -334,6 +380,10 @@ std::string AES_Encrypt(AES_KeySize keySize, AES_Mode aes_mode, const std::strin
     case AES_192: roundsCount = 12; break;
     case AES_256: roundsCount = 14; break;
     }
+
+    data = AddPaddingToData(data);
+    key = AddPaddingToKey(keySize, key);
+    IV = AddPaddingToKey(AES_128, IV);
 
     std::string stateIV = IV;
     std::string keyShedule = KeyExpansion(keySize, key);
@@ -383,10 +433,23 @@ std::string AES_Encrypt(AES_KeySize keySize, AES_Mode aes_mode, const std::strin
     return res;
 }
 
-// Encryption function. The length of the data to be encrypted must be a multiple of 16. The key length must be 16. Padding is not yet available
-std::string AES_Decrypt(AES_KeySize keySize, AES_Mode aes_mode, const std::string& data, std::string key, std::string IV = "")
+// Encryption function. The data and key will be aligned using the algorithm PKCS#7
+// If the CBC mode used IV must be set
+std::string AES_Decrypt(AES_KeySize keySize, AES_Mode aes_mode, std::string data, std::string key, std::string IV = "")
 {
-    if (data.length() % 16 != 0 || key.length() != keySize || (aes_mode == CBC && IV.length() != 16)) return "";
+    if (data.length() == 0 || key.length() == 0 || (aes_mode == CBC && IV.length() == 0))
+    {
+        if (data.length() == 0)
+            std::cerr << "In AES_Decrypt function: Data length cannot be zero" << std::endl;
+        
+        if (key.length() == 0)
+            std::cerr << "In AES_Decrypt function: Key length cannot be zero" << std::endl;
+
+        if (aes_mode == CBC && IV.length() == 0)
+            std::cerr << "In AES_Decrypt function: IV(initialization vector) length cannot be zero" << std::endl;
+
+        throw;
+    }
 
     int roundsCount;
     switch (keySize)
@@ -395,6 +458,9 @@ std::string AES_Decrypt(AES_KeySize keySize, AES_Mode aes_mode, const std::strin
     case AES_192: roundsCount = 12; break;
     case AES_256: roundsCount = 14; break;
     }
+
+    key = AddPaddingToKey(keySize, key);
+    IV = AddPaddingToKey(AES_128, IV);
 
     std::string stateIV = IV;
     std::string keyShedule = KeyExpansion(keySize, key);
@@ -438,38 +504,95 @@ std::string AES_Decrypt(AES_KeySize keySize, AES_Mode aes_mode, const std::strin
             res += stateRes;
     }
 
-    return res;
+    return RemovePadding(res);
 }
 
 int main()
 {
     // To-Do 
-    // 1. functions to work with base64
-    // 3. Key and data padding
-    // 4. Returning values when wrong input data ?
+    // 1. Functions to work with base64
+    // 2. Cypher files
 
     // Site to check http://aes.online-domain-tools.com/
+    // This site uses a different padding and if you transmit incomplete data and keys, the result of this program and the site will be different
+    // AES_KeySize: AES_128, AES_192, AES_256
+    // AES_Mode: ECB, CBC
 
-    // 128 bit
-    std::cout << "128 bit mode" << std::endl;
-    std::string data = "aktoaktoaktoaktoagdeagdeagdeagde";
-    std::string key = "akakakakakakakak";
-    std::string IV = "akakakakakakakak";
-    std::string encryptedData = AES_Encrypt(AES_128, CBC, data, key, IV);
+    // 128 bit ECB mode
+    std::cout << "128 bit ECB mode" << std::endl;
+    std::string data = "Some text to hide it from others";
+    std::string key = "my key";
+
+    std::string encryptedData = AES_Encrypt(AES_128, ECB, data, key);
 
     for (auto it : encryptedData) 
         std::cout << IntToHexForm((unsigned char)it);
     
     std::cout << std::endl;
 
-    std::string decryptedData = AES_Decrypt(AES_128, CBC, encryptedData, key, IV);
+    std::string decryptedData = AES_Decrypt(AES_128, ECB, encryptedData, key);
     std::cout << decryptedData << std::endl;
     std::cout << std::endl;
 
-    // 192 bit
-    std::cout << "192 bit mode" << std::endl;
-    data = "aktoaktoaktoaktoagdeagdeagdeagde";
-    key = "agdeagdeagdeagdeagdeagde";
+
+    // 192 bit ECB mode
+    std::cout << "192 bit ECB mode" << std::endl;
+    data = "Different text to hide it from others";
+    key = "my new key";
+
+    encryptedData = AES_Encrypt(AES_192, ECB, data, key);
+
+    for (auto it : encryptedData) 
+        std::cout << IntToHexForm((unsigned char)it);
+    
+    std::cout << std::endl;
+
+    decryptedData = AES_Decrypt(AES_192, ECB, encryptedData, key);
+    std::cout << decryptedData << std::endl;
+    std::cout << std::endl;
+
+
+    // 256 bit ECB mode
+    std::cout << "256 bit ECB mode" << std::endl;
+    data = "Third text";
+    key = "my 256 bits key";
+
+    encryptedData = AES_Encrypt(AES_256, ECB, data, key);
+
+    for (auto it : encryptedData) 
+        std::cout << IntToHexForm((unsigned char)it);
+    
+    std::cout << std::endl;
+
+    decryptedData = AES_Decrypt(AES_256, ECB, encryptedData, key);
+    std::cout << decryptedData << std::endl;
+    std::cout << std::endl;
+
+    
+    // 128 bit CBC mode
+    std::cout << "128 bit CBC mode" << std::endl;
+    data = "Some text to hide it from others with super security";
+    key = "my cbc key";
+    std::string IV = "init vector";
+
+    encryptedData = AES_Encrypt(AES_128, CBC, data, key, IV);
+
+    for (auto it : encryptedData) 
+        std::cout << IntToHexForm((unsigned char)it);
+    
+    std::cout << std::endl;
+
+    decryptedData = AES_Decrypt(AES_128, CBC, encryptedData, key, IV);
+    std::cout << decryptedData << std::endl;
+    std::cout << std::endl;
+
+
+    // 192 bit CBC mode
+    std::cout << "192 bit CBC mode" << std::endl;
+    data = "Different text to hide it from others with cbc";
+    key = "my new super security key";
+    IV = "new IV";
+
     encryptedData = AES_Encrypt(AES_192, CBC, data, key, IV);
 
     for (auto it : encryptedData) 
@@ -479,13 +602,15 @@ int main()
 
     decryptedData = AES_Decrypt(AES_192, CBC, encryptedData, key, IV);
     std::cout << decryptedData << std::endl;
-
     std::cout << std::endl;
 
-    // 256 bit
-    std::cout << "256 bit mode" << std::endl;
-    data = "ladnoladnoladnoZ";
-    key = "akakakakakakakakagdeagdeagdeagde";
+
+    // 256 bit CBC mode
+    std::cout << "256 bit CBC mode" << std::endl;
+    data = "Sixth and third text";
+    key = "my 256 bits key with giga security";
+    IV = "Giga IV";
+
     encryptedData = AES_Encrypt(AES_256, CBC, data, key, IV);
 
     for (auto it : encryptedData) 
@@ -495,4 +620,5 @@ int main()
 
     decryptedData = AES_Decrypt(AES_256, CBC, encryptedData, key, IV);
     std::cout << decryptedData << std::endl;
+    std::cout << std::endl;
 }
