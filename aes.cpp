@@ -118,11 +118,19 @@ inline std::string XorString(const std::string& str1, const std::string& str2)
     return res;
 } 
 
-enum AES_Mode
+// Enum with availavble key sizes. 128 bit, 192 bit, 256 bit.
+enum AES_KeySize
 {
     AES_128 = 16,
     AES_192 = 24,
     AES_256 = 32
+};
+
+// Enum with available cypher modes. ECB and CBC
+enum AES_Mode
+{
+    ECB,
+    CBC
 };
 
 // Galois Field (256) multiplication of two bytes
@@ -243,10 +251,10 @@ inline void InvMixColumns(unsigned char *mat)
 }
 
 // Process 16 bytes in 4x4 matrix with unsigned chars. Kreate key shedule
-inline std::string KeyExpansion(AES_Mode aes_mode, const std::string& key)
+inline std::string KeyExpansion(AES_KeySize keySize, const std::string& key)
 {
     int keySheduleLength, Nk;
-    switch (aes_mode)
+    switch (keySize)
     {
     case AES_128: keySheduleLength = 44; Nk = 4; break;
     case AES_192: keySheduleLength = 52; Nk = 6; break;
@@ -281,7 +289,7 @@ inline std::string KeyExpansion(AES_Mode aes_mode, const std::string& key)
         }
         else
         {
-            if (aes_mode == AES_256 && (i + 4) % 8 == 0)
+            if (keySize == AES_256 && (i + 4) % 8 == 0)
             {
                 // Change unsigned chars to chars in const SBox matrix
                 w[0] = SBox[w[0] / 16][w[0] % 16];
@@ -315,114 +323,12 @@ inline void AddRoundKey(unsigned char* state, const std::string& key)
 }
 
 // Encryption function. The length of the data to be encrypted must be a multiple of 16. The key length must be 16. Padding is not yet available
-std::string AES_ECB_Encrypt(AES_Mode aes_mode, const std::string& data, const std::string& key)
+std::string AES_Encrypt(AES_KeySize keySize, AES_Mode aes_mode, const std::string& data, std::string key, std::string IV = "")
 {
-    if (data.length() % 16 != 0 || key.length() != aes_mode)
-        return "";
+    if (data.length() % 16 != 0 || key.length() != keySize || (aes_mode == CBC && IV.length() != 16)) return "";
 
     int roundsCount;
-    switch (aes_mode)
-    {
-    case AES_128: roundsCount = 10; break;
-    case AES_192: roundsCount = 12; break;
-    case AES_256: roundsCount = 14; break;
-    }
-
-    std::string keyShedule = KeyExpansion(aes_mode, key);
-    std::string res;
-
-    for(int i = 0; i < data.length() / 16; i++)
-    {
-        unsigned char state[4][4];
-
-        // Save data from string to state matrix
-        for (int j = 0; j < 4; j++)
-            for (int k = 0; k < 4; k++)
-                state[k][j] = data[i * 16 + j * 4 + k];
-
-        AddRoundKey(&state[0][0], key);
-        for (int j = 1; j < roundsCount; j++)
-        {
-            SubBytes(&state[0][0]);
-            ShiftRows(&state[0][0]);
-            MixColumns(&state[0][0]);
-            AddRoundKey(&state[0][0], keyShedule.substr(j * 16, 16));
-        }
-
-        SubBytes(&state[0][0]);
-        ShiftRows(&state[0][0]);
-        AddRoundKey(&state[0][0], keyShedule.substr(keyShedule.length() - 16, 16));
-
-        // Save data from state matrix to string
-        std::string stateRes;
-        for (int i = 0; i < 4; i++)
-            for (int j = 0; j < 4; j++)
-                stateRes += state[j][i];
-
-        res += stateRes;
-    }
-
-    return res;
-}
-
-// Encryption function. The length of the data to be encrypted must be a multiple of 16. The key length must be 16. Padding is not yet available
-std::string AES_ECB_Decrypt(AES_Mode aes_mode, const std::string& data, const std::string& key)
-{
-    if (data.length() % 16 != 0 || key.length() != aes_mode) return "";
-
-    int roundsCount;
-    switch (aes_mode)
-    {
-    case AES_128: roundsCount = 10; break;
-    case AES_192: roundsCount = 12; break;
-    case AES_256: roundsCount = 14; break;
-    }
-
-    std::string keyShedule = KeyExpansion(aes_mode, key);
-    std::string res;
-
-    for(int i = 0; i < data.length() / 16; i++)
-    {
-        unsigned char state[4][4];
-
-        // Save data from string to state matrix
-        for (int j = 0; j < 4; j++)
-            for (int k = 0; k < 4; k++)
-                state[k][j] = data[i * 16 + j * 4 + k];
-
-        AddRoundKey(&state[0][0], keyShedule.substr(keyShedule.length() - 16));
-
-        for (int j = 1; j < roundsCount; j++)
-        {
-            InvShiftRows(&state[0][0]);
-            InvSubBytes(&state[0][0]);
-            AddRoundKey(&state[0][0], keyShedule.substr((roundsCount - j) * 16, 16));
-            InvMixColumns(&state[0][0]);
-        }
-
-        InvShiftRows(&state[0][0]);
-        InvSubBytes(&state[0][0]);
-        AddRoundKey(&state[0][0], key);
-
-        // Save data from state matrix to string
-        std::string stateRes;
-        for (int i = 0; i < 4; i++)
-            for (int j = 0; j < 4; j++)
-                stateRes += state[j][i];
-
-        res += stateRes;
-    }
-
-    return res;
-}
-
-// Encryption function. The length of the data to be encrypted must be a multiple of 16. The key length must be 16. Padding is not yet available
-std::string AES_CBC_Encrypt(AES_Mode aes_mode, const std::string& data, const std::string& key, const std::string& IV)
-{
-    if (data.length() % 16 != 0 || key.length() != aes_mode || IV.length() != 16) return "";
-
-    int roundsCount;
-    switch (aes_mode)
+    switch (keySize)
     {
     case AES_128: roundsCount = 10; break;
     case AES_192: roundsCount = 12; break;
@@ -430,12 +336,17 @@ std::string AES_CBC_Encrypt(AES_Mode aes_mode, const std::string& data, const st
     }
 
     std::string stateIV = IV;
-    std::string keyShedule = KeyExpansion(aes_mode, key);
+    std::string keyShedule = KeyExpansion(keySize, key);
     std::string res;
 
     for(int i = 0; i < data.length() / 16; i++)
     {
-        std::string dataChunk = XorString(stateIV, data.substr(i*16, 16));
+        std::string dataChunk;
+
+        if (aes_mode == CBC)
+            dataChunk = XorString(stateIV, data.substr(i*16, 16));
+        else 
+            dataChunk = data.substr(i*16, 16);
 
         unsigned char state[4][4];
 
@@ -459,11 +370,13 @@ std::string AES_CBC_Encrypt(AES_Mode aes_mode, const std::string& data, const st
 
         // Save data from state matrix to string
         std::string stateRes;
-        for (int i = 0; i < 4; i++)
-            for (int j = 0; j < 4; j++)
-                stateRes += state[j][i];
+        for (int j = 0; j < 4; j++)
+            for (int k = 0; k < 4; k++)
+                stateRes += state[k][j];
 
-        stateIV = stateRes;
+        if (aes_mode == CBC)
+            stateIV = stateRes;
+
         res += stateRes;
     }
 
@@ -471,12 +384,12 @@ std::string AES_CBC_Encrypt(AES_Mode aes_mode, const std::string& data, const st
 }
 
 // Encryption function. The length of the data to be encrypted must be a multiple of 16. The key length must be 16. Padding is not yet available
-std::string AES_CBC_Decrypt(AES_Mode aes_mode, const std::string& data, const std::string& key, const std::string& IV)
+std::string AES_Decrypt(AES_KeySize keySize, AES_Mode aes_mode, const std::string& data, std::string key, std::string IV = "")
 {
-    if (data.length() % 16 != 0 || key.length() != aes_mode) return "";
+    if (data.length() % 16 != 0 || key.length() != keySize || (aes_mode == CBC && IV.length() != 16)) return "";
 
     int roundsCount;
-    switch (aes_mode)
+    switch (keySize)
     {
     case AES_128: roundsCount = 10; break;
     case AES_192: roundsCount = 12; break;
@@ -484,7 +397,7 @@ std::string AES_CBC_Decrypt(AES_Mode aes_mode, const std::string& data, const st
     }
 
     std::string stateIV = IV;
-    std::string keyShedule = KeyExpansion(aes_mode, key);
+    std::string keyShedule = KeyExpansion(keySize, key);
     std::string res;
 
     for(int i = 0; i < data.length() / 16; i++)
@@ -512,12 +425,17 @@ std::string AES_CBC_Decrypt(AES_Mode aes_mode, const std::string& data, const st
 
         // Save data from state matrix to string
         std::string stateRes;
-        for (int i = 0; i < 4; i++)
-            for (int j = 0; j < 4; j++)
-                stateRes += state[j][i];
+        for (int j = 0; j < 4; j++)
+            for (int k = 0; k < 4; k++)
+                stateRes += state[k][j];
 
-        res += XorString(stateIV, stateRes);
-        stateIV = data.substr(i * 16, 16);
+        if (aes_mode == CBC)
+        {
+            res += XorString(stateIV, stateRes);
+            stateIV = data.substr(i * 16, 16);
+        }
+        else 
+            res += stateRes;
     }
 
     return res;
@@ -527,7 +445,6 @@ int main()
 {
     // To-Do 
     // 1. functions to work with base64
-    // 2. CBC
     // 3. Key and data padding
     // 4. Returning values when wrong input data ?
 
@@ -538,14 +455,14 @@ int main()
     std::string data = "aktoaktoaktoaktoagdeagdeagdeagde";
     std::string key = "akakakakakakakak";
     std::string IV = "akakakakakakakak";
-    std::string encryptedData = AES_CBC_Encrypt(AES_128, data, key, IV);
+    std::string encryptedData = AES_Encrypt(AES_128, CBC, data, key, IV);
 
     for (auto it : encryptedData) 
         std::cout << IntToHexForm((unsigned char)it);
     
     std::cout << std::endl;
 
-    std::string decryptedData = AES_CBC_Decrypt(AES_128, StringWithHexToNormalString("b3a2aa5100dbdc3708496868b52d867f344e4ef37b7bcf76c8495549111db6f0"), key, IV);
+    std::string decryptedData = AES_Decrypt(AES_128, CBC, encryptedData, key, IV);
     std::cout << decryptedData << std::endl;
     std::cout << std::endl;
 
@@ -553,14 +470,14 @@ int main()
     std::cout << "192 bit mode" << std::endl;
     data = "aktoaktoaktoaktoagdeagdeagdeagde";
     key = "agdeagdeagdeagdeagdeagde";
-    encryptedData = AES_CBC_Encrypt(AES_192, data, key, IV);
+    encryptedData = AES_Encrypt(AES_192, CBC, data, key, IV);
 
     for (auto it : encryptedData) 
         std::cout << IntToHexForm((unsigned char)it);
     
     std::cout << std::endl;
 
-    decryptedData = AES_CBC_Decrypt(AES_192, encryptedData, key, IV);
+    decryptedData = AES_Decrypt(AES_192, CBC, encryptedData, key, IV);
     std::cout << decryptedData << std::endl;
 
     std::cout << std::endl;
@@ -569,13 +486,13 @@ int main()
     std::cout << "256 bit mode" << std::endl;
     data = "ladnoladnoladnoZ";
     key = "akakakakakakakakagdeagdeagdeagde";
-    encryptedData = AES_CBC_Encrypt(AES_256, data, key, IV);
+    encryptedData = AES_Encrypt(AES_256, CBC, data, key, IV);
 
     for (auto it : encryptedData) 
         std::cout << IntToHexForm((unsigned char)it);
     
     std::cout << std::endl;
 
-    decryptedData = AES_CBC_Decrypt(AES_256, encryptedData, key, IV);
+    decryptedData = AES_Decrypt(AES_256, CBC, encryptedData, key, IV);
     std::cout << decryptedData << std::endl;
 }
