@@ -512,6 +512,7 @@ int main()
     // To-Do 
     // 1. Functions to work with base64
     // 2. Cypher files
+    // 3. Multithreading
 
     // Site to check http://aes.online-domain-tools.com/
     // This site uses a different padding and if you transmit incomplete data and keys, the result of this program and the site will be different
