@@ -105,6 +105,12 @@ std::string StringWithHexToNormalString(const std::string& str)
     return res;
 }
 
+enum AES_Mode
+{
+    AES_128 = 16,
+    AES_192 = 24,
+    AES_256 = 32
+};
 
 // Galois Field (256) multiplication of two bytes
 unsigned char GaloisMul(unsigned char a, unsigned char b)
@@ -224,17 +230,25 @@ inline void InvMixColumns(unsigned char *mat)
 }
 
 // Process 16 bytes in 4x4 matrix with unsigned chars. Kreate key shedule
-inline std::string KeyExpansion(const std::string& key)
+inline std::string KeyExpansion(AES_Mode aes_mode, const std::string& key)
 {
+    int keySheduleLength, Nk;
+    switch (aes_mode)
+    {
+    case AES_128: keySheduleLength = 44; Nk = 4; break;
+    case AES_192: keySheduleLength = 52; Nk = 6; break;
+    case AES_256: keySheduleLength = 60; Nk = 8; break;
+    }
+
     std::string KeyShedule = key;
 
-    for (int i = 4; i < 44; i++)
+    for (int i = Nk; i < keySheduleLength; i++)
     {
         // Get previous column element
         unsigned char w[4] = {(unsigned char)KeyShedule[i*4 - 4], (unsigned char)KeyShedule[i*4 - 3], (unsigned char)KeyShedule[i*4 - 2], (unsigned char)KeyShedule[i*4 - 1]};
 
         // Check if column multiply for 4
-        if (i % 4 == 0)
+        if (i % Nk == 0)
         {
             // Circular shift in column
             unsigned char tmp = w[0];
@@ -247,19 +261,29 @@ inline std::string KeyExpansion(const std::string& key)
             w[3] = SBox[w[3] / 16][w[3] % 16];
 
             // Xoring
-            w[0] = w[0] ^ Rcon[i/4 - 1][0] ^ KeyShedule[i*4 - 16];
-            w[1] = w[1] ^ Rcon[i/4 - 1][1] ^ KeyShedule[i*4 - 15];
-            w[2] = w[2] ^ Rcon[i/4 - 1][2] ^ KeyShedule[i*4 - 14];
-            w[3] = w[3] ^ Rcon[i/4 - 1][3] ^ KeyShedule[i*4 - 13];
+            w[0] = w[0] ^ Rcon[i/Nk - 1][0] ^ KeyShedule[i*4 - Nk*4];
+            w[1] = w[1] ^ Rcon[i/Nk - 1][1] ^ KeyShedule[i*4 - Nk*4 + 1];
+            w[2] = w[2] ^ Rcon[i/Nk - 1][2] ^ KeyShedule[i*4 - Nk*4 + 2];
+            w[3] = w[3] ^ Rcon[i/Nk - 1][3] ^ KeyShedule[i*4 - Nk*4 + 3];
         }
         else
         {
+            if (aes_mode == AES_256 && (i + 4) % 8 == 0)
+            {
+                // Change unsigned chars to chars in const SBox matrix
+                w[0] = SBox[w[0] / 16][w[0] % 16];
+                w[1] = SBox[w[1] / 16][w[1] % 16];
+                w[2] = SBox[w[2] / 16][w[2] % 16];
+                w[3] = SBox[w[3] / 16][w[3] % 16];
+            }
+
             // Xoring
-            w[0] = w[0] ^ KeyShedule[i*4 - 16];
-            w[1] = w[1] ^ KeyShedule[i*4 - 15];
-            w[2] = w[2] ^ KeyShedule[i*4 - 14];
-            w[3] = w[3] ^ KeyShedule[i*4 - 13];
+            w[0] = w[0] ^ KeyShedule[i*4 - Nk*4];
+            w[1] = w[1] ^ KeyShedule[i*4 - Nk*4 + 1];
+            w[2] = w[2] ^ KeyShedule[i*4 - Nk*4 + 2];
+            w[3] = w[3] ^ KeyShedule[i*4 - Nk*4 + 3];
         }
+
         KeyShedule += w[0];
         KeyShedule += w[1];
         KeyShedule += w[2];
@@ -278,12 +302,20 @@ inline void AddRoundKey(unsigned char* state, const std::string& key)
 }
 
 // Encryption function. The length of the data to be encrypted must be a multiple of 16. The key length must be 16. Padding is not yet available
-std::string AES_Encrypt(const std::string& data, const std::string& key)
+std::string AES_Encrypt(AES_Mode aes_mode, const std::string& data, const std::string& key)
 {
-    if (data.length() % 16 != 0 || key.length() != 16)
+    if (data.length() % 16 != 0 || key.length() != aes_mode)
         return "";
 
-    std::string keyShedule = KeyExpansion(key);
+    int roundsCount;
+    switch (aes_mode)
+    {
+    case AES_128: roundsCount = 10; break;
+    case AES_192: roundsCount = 12; break;
+    case AES_256: roundsCount = 14; break;
+    }
+
+    std::string keyShedule = KeyExpansion(aes_mode, key);
     std::string res;
 
     for(int i = 0; i < data.length() / 16; i++)
@@ -296,7 +328,7 @@ std::string AES_Encrypt(const std::string& data, const std::string& key)
                 state[k][j] = data[i * 16 + j * 4 + k];
 
         AddRoundKey(&state[0][0], key);
-        for (int j = 1; j < 10; j++)
+        for (int j = 1; j < roundsCount; j++)
         {
             SubBytes(&state[0][0]);
             ShiftRows(&state[0][0]);
@@ -321,11 +353,19 @@ std::string AES_Encrypt(const std::string& data, const std::string& key)
 }
 
 // Encryption function. The length of the data to be encrypted must be a multiple of 16. The key length must be 16. Padding is not yet available
-std::string AES_Decrypt(const std::string& data, const std::string& key)
+std::string AES_Decrypt(AES_Mode aes_mode, const std::string& data, const std::string& key)
 {
-    if (data.length() % 16 != 0 || key.length() != 16) return "";
+    if (data.length() % 16 != 0 || key.length() != aes_mode) return "";
 
-    std::string keyShedule = KeyExpansion(key);
+    int roundsCount;
+    switch (aes_mode)
+    {
+    case AES_128: roundsCount = 10; break;
+    case AES_192: roundsCount = 12; break;
+    case AES_256: roundsCount = 14; break;
+    }
+
+    std::string keyShedule = KeyExpansion(aes_mode, key);
     std::string res;
 
     for(int i = 0; i < data.length() / 16; i++)
@@ -339,11 +379,11 @@ std::string AES_Decrypt(const std::string& data, const std::string& key)
 
         AddRoundKey(&state[0][0], keyShedule.substr(keyShedule.length() - 16));
 
-        for (int j = 1; j < 10; j++)
+        for (int j = 1; j < roundsCount; j++)
         {
             InvShiftRows(&state[0][0]);
             InvSubBytes(&state[0][0]);
-            AddRoundKey(&state[0][0], keyShedule.substr((10 - j) * 16, 16));
+            AddRoundKey(&state[0][0], keyShedule.substr((roundsCount - j) * 16, 16));
             InvMixColumns(&state[0][0]);
         }
 
@@ -367,20 +407,53 @@ int main()
 {
     // To-Do 
     // 1. functions to work with base64
-    // 2. 192, 256 modes
-    // 3. CBC
-    // 4. Key and data padding
+    // 2. CBC
+    // 3. Key and data padding
     
     // Site to check http://aes.online-domain-tools.com/
+
+    // 128 bit
+    std::cout << "128 bit mode" << std::endl;
     std::string data = "aktoaktoaktoaktoagdeagdeagdeagde";
     std::string key = "akakakakakakakak";
-    std::string encryptedData = AES_Encrypt(data, key);
+    std::string encryptedData = AES_Encrypt(AES_128, data, key);
 
     for (auto it : encryptedData) 
         std::cout << IntToHexForm((unsigned char)it);
     
     std::cout << std::endl;
 
-    std::string decryptedData = AES_Decrypt(StringWithHexToNormalString("ae56671cdcf8b3068259ae8bf8bda940176395e0760c88d40a29b74a5c240ddf"), key);
+    std::string decryptedData = AES_Decrypt(AES_128, StringWithHexToNormalString("ae56671cdcf8b3068259ae8bf8bda940176395e0760c88d40a29b74a5c240ddf"), key);
+    std::cout << decryptedData << std::endl;
+    std::cout << std::endl;
+
+    // 192 bit
+    std::cout << "192 bit mode" << std::endl;
+    data = "aktoaktoaktoaktoagdeagdeagdeagde";
+    key = "agdeagdeagdeagdeagdeagde";
+    encryptedData = AES_Encrypt(AES_192, data, key);
+
+    for (auto it : encryptedData) 
+        std::cout << IntToHexForm((unsigned char)it);
+    
+    std::cout << std::endl;
+
+    decryptedData = AES_Decrypt(AES_192, StringWithHexToNormalString("fc11262e79b7d20b739083af566f7f08dc5695d2f6e6309a2736755650534e84"), key);
+    std::cout << decryptedData << std::endl;
+
+    std::cout << std::endl;
+
+    // 256 bit
+    std::cout << "256 bit mode" << std::endl;
+    data = "ladnoladnoladnoZ";
+    key = "akakakakakakakakagdeagdeagdeagde";
+    encryptedData = AES_Encrypt(AES_256, data, key);
+
+    for (auto it : encryptedData) 
+        std::cout << IntToHexForm((unsigned char)it);
+    
+    std::cout << std::endl;
+
+    decryptedData = AES_Decrypt(AES_256, StringWithHexToNormalString("1c4c0aea6ecbb68a0255380ced4c8097"), key);
     std::cout << decryptedData << std::endl;
 }
