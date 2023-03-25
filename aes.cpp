@@ -354,6 +354,38 @@ inline void AddRoundKey(unsigned char* state, const std::string& key)
             state[j * 4 + i] = state[j * 4 + i] ^ (unsigned char)key[i * 4 + j];
 }
 
+// Encrypts 64 bytes block using AES algo
+inline std::string AES_EncryptStep(const std::string& data, const std::string& keyShedule, int roundsCount)
+{
+    unsigned char state[4][4];
+
+    // Save data from string to state matrix
+    for (int j = 0; j < 4; j++)
+        for (int k = 0; k < 4; k++)
+            state[k][j] = data[j * 4 + k];
+
+    AddRoundKey(&state[0][0], keyShedule.substr(0, 16));
+    for (int j = 1; j < roundsCount; j++)
+    {
+        SubBytes(&state[0][0]);
+        ShiftRows(&state[0][0]);
+        MixColumns(&state[0][0]);
+        AddRoundKey(&state[0][0], keyShedule.substr(j * 16, 16));
+    }
+
+    SubBytes(&state[0][0]);
+    ShiftRows(&state[0][0]);
+    AddRoundKey(&state[0][0], keyShedule.substr(keyShedule.length() - 16, 16));
+
+    // Save data from state matrix to string
+    std::string res;
+    for (int j = 0; j < 4; j++)
+        for (int k = 0; k < 4; k++)
+            res += state[k][j];
+
+    return res;
+}
+
 // Encryption function. The data and key will be aligned using the algorithm PKCS#7
 // If the key is greater than the value specified in keySize, the first keySize bits or keySize/8 characters will be taken from it
 // If the CBC mode used IV must be set
@@ -398,38 +430,47 @@ std::string AES_Encrypt(AES_KeySize keySize, AES_Mode aes_mode, std::string data
         else 
             dataChunk = data.substr(i*16, 16);
 
-        unsigned char state[4][4];
-
-        // Save data from string to state matrix
-        for (int j = 0; j < 4; j++)
-            for (int k = 0; k < 4; k++)
-                state[k][j] = dataChunk[j * 4 + k];
-
-        AddRoundKey(&state[0][0], key);
-        for (int j = 1; j < roundsCount; j++)
-        {
-            SubBytes(&state[0][0]);
-            ShiftRows(&state[0][0]);
-            MixColumns(&state[0][0]);
-            AddRoundKey(&state[0][0], keyShedule.substr(j * 16, 16));
-        }
-
-        SubBytes(&state[0][0]);
-        ShiftRows(&state[0][0]);
-        AddRoundKey(&state[0][0], keyShedule.substr(keyShedule.length() - 16, 16));
-
-        // Save data from state matrix to string
-        std::string stateRes;
-        for (int j = 0; j < 4; j++)
-            for (int k = 0; k < 4; k++)
-                stateRes += state[k][j];
+        std::string state = AES_EncryptStep(dataChunk, keyShedule, roundsCount);
 
         if (aes_mode == CBC)
-            stateIV = stateRes;
+            stateIV = state;
 
-        res += stateRes;
+        res += state;
     }
 
+    return res;
+}
+
+// Decrypts 64 bytes block using AES algo
+inline std::string AES_DecryptStep(const std::string& data, const std::string& keyShedule, int roundsCount)
+{
+    unsigned char state[4][4];
+
+    // Save data from string to state matrix
+    for (int j = 0; j < 4; j++)
+        for (int k = 0; k < 4; k++)
+            state[k][j] = data[j * 4 + k];
+
+    AddRoundKey(&state[0][0], keyShedule.substr(keyShedule.length() - 16));
+
+    for (int j = 1; j < roundsCount; j++)
+    {
+        InvShiftRows(&state[0][0]);
+        InvSubBytes(&state[0][0]);
+        AddRoundKey(&state[0][0], keyShedule.substr((roundsCount - j) * 16, 16));
+        InvMixColumns(&state[0][0]);
+    }
+
+    InvShiftRows(&state[0][0]);
+    InvSubBytes(&state[0][0]);
+    AddRoundKey(&state[0][0], keyShedule.substr(0, 16));
+
+    // Save data from state matrix to string
+    std::string res;
+    for (int j = 0; j < 4; j++)
+        for (int k = 0; k < 4; k++)
+            res += state[k][j];
+    
     return res;
 }
 
@@ -468,40 +509,17 @@ std::string AES_Decrypt(AES_KeySize keySize, AES_Mode aes_mode, std::string data
 
     for(int i = 0; i < data.length() / 16; i++)
     {
-        unsigned char state[4][4];
+        std::string dataChunk = data.substr(i*16, 16);
 
-        // Save data from string to state matrix
-        for (int j = 0; j < 4; j++)
-            for (int k = 0; k < 4; k++)
-                state[k][j] = data[i * 16 + j * 4 + k];
-
-        AddRoundKey(&state[0][0], keyShedule.substr(keyShedule.length() - 16));
-
-        for (int j = 1; j < roundsCount; j++)
-        {
-            InvShiftRows(&state[0][0]);
-            InvSubBytes(&state[0][0]);
-            AddRoundKey(&state[0][0], keyShedule.substr((roundsCount - j) * 16, 16));
-            InvMixColumns(&state[0][0]);
-        }
-
-        InvShiftRows(&state[0][0]);
-        InvSubBytes(&state[0][0]);
-        AddRoundKey(&state[0][0], key);
-
-        // Save data from state matrix to string
-        std::string stateRes;
-        for (int j = 0; j < 4; j++)
-            for (int k = 0; k < 4; k++)
-                stateRes += state[k][j];
+        std::string state = AES_DecryptStep(dataChunk, keyShedule, roundsCount);
 
         if (aes_mode == CBC)
         {
-            res += XorString(stateIV, stateRes);
+            res += XorString(stateIV, state);
             stateIV = data.substr(i * 16, 16);
         }
         else 
-            res += stateRes;
+            res += state;
     }
 
     return RemovePadding(res);
