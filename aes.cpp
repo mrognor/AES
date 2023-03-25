@@ -63,11 +63,12 @@ enum AES_KeySize
     AES_256 = 32
 };
 
-// Enum with available cypher modes. ECB and CBC
+// Enum with available cypher modes. ECB, CBC, PCBC
 enum AES_Mode
 {
     ECB,
-    CBC
+    CBC,
+    PCBC
 };
 
 // Convert int to string with hex form of this number
@@ -425,15 +426,21 @@ std::string AES_Encrypt(AES_KeySize keySize, AES_Mode aes_mode, std::string data
     {
         std::string dataChunk;
 
-        if (aes_mode == CBC)
-            dataChunk = XorString(stateIV, data.substr(i*16, 16));
-        else 
-            dataChunk = data.substr(i*16, 16);
+        switch(aes_mode)
+        {
+        case ECB: dataChunk = data.substr(i*16, 16); break;
+        case CBC: dataChunk = XorString(stateIV, data.substr(i*16, 16)); break;
+        case PCBC: dataChunk = XorString(stateIV, data.substr(i*16, 16)); break;
+        }           
 
         std::string state = AES_EncryptStep(dataChunk, keyShedule, roundsCount);
 
-        if (aes_mode == CBC)
-            stateIV = state;
+        switch(aes_mode)
+        {
+        case ECB: break;
+        case CBC: stateIV = state; break;
+        case PCBC: stateIV = XorString(state, data.substr(i*16, 16)); break;
+        }                  
 
         res += state;
     }
@@ -509,17 +516,29 @@ std::string AES_Decrypt(AES_KeySize keySize, AES_Mode aes_mode, std::string data
 
     for(int i = 0; i < data.length() / 16; i++)
     {
-        std::string dataChunk = data.substr(i*16, 16);
+        std::string dataChunk;
+
+        switch(aes_mode)
+        {
+        case ECB: dataChunk = data.substr(i*16, 16); break;
+        case CBC: dataChunk = data.substr(i*16, 16); break;
+        case PCBC: dataChunk = data.substr(i*16, 16); break;
+        }
 
         std::string state = AES_DecryptStep(dataChunk, keyShedule, roundsCount);
 
-        if (aes_mode == CBC)
+        switch(aes_mode)
         {
+        case ECB: res += state; break;
+        case CBC: 
+            res += XorString(stateIV, state); 
+            stateIV = data.substr(i * 16, 16); 
+            break;
+        case PCBC: 
             res += XorString(stateIV, state);
-            stateIV = data.substr(i * 16, 16);
+            stateIV = XorString(state, dataChunk); 
+            break;
         }
-        else 
-            res += state;
     }
 
     return RemovePadding(res);
@@ -542,102 +561,102 @@ int main()
     std::string data = "Some text to hide it from others";
     std::string key = "my key";
 
-    std::string encryptedData = AES_Encrypt(AES_128, ECB, data, key);
+    std::string encryptedData = AES_Encrypt(AES_128, PCBC, data, key);
 
     for (auto it : encryptedData) 
         std::cout << IntToHexForm((unsigned char)it);
     
     std::cout << std::endl;
 
-    std::string decryptedData = AES_Decrypt(AES_128, ECB, encryptedData, key);
+    std::string decryptedData = AES_Decrypt(AES_128, PCBC, encryptedData, key);
     std::cout << decryptedData << std::endl;
     std::cout << std::endl;
 
 
-    // 192 bit ECB mode
-    std::cout << "192 bit ECB mode" << std::endl;
-    data = "Different text to hide it from others";
-    key = "my new key";
+    // // 192 bit ECB mode
+    // std::cout << "192 bit ECB mode" << std::endl;
+    // data = "Different text to hide it from others";
+    // key = "my new key";
 
-    encryptedData = AES_Encrypt(AES_192, ECB, data, key);
+    // encryptedData = AES_Encrypt(AES_192, ECB, data, key);
 
-    for (auto it : encryptedData) 
-        std::cout << IntToHexForm((unsigned char)it);
+    // for (auto it : encryptedData) 
+    //     std::cout << IntToHexForm((unsigned char)it);
     
-    std::cout << std::endl;
+    // std::cout << std::endl;
 
-    decryptedData = AES_Decrypt(AES_192, ECB, encryptedData, key);
-    std::cout << decryptedData << std::endl;
-    std::cout << std::endl;
+    // decryptedData = AES_Decrypt(AES_192, ECB, encryptedData, key);
+    // std::cout << decryptedData << std::endl;
+    // std::cout << std::endl;
 
 
-    // 256 bit ECB mode
-    std::cout << "256 bit ECB mode" << std::endl;
-    data = "Third text";
-    key = "my 256 bits key";
+    // // 256 bit ECB mode
+    // std::cout << "256 bit ECB mode" << std::endl;
+    // data = "Third text";
+    // key = "my 256 bits key";
 
-    encryptedData = AES_Encrypt(AES_256, ECB, data, key);
+    // encryptedData = AES_Encrypt(AES_256, ECB, data, key);
 
-    for (auto it : encryptedData) 
-        std::cout << IntToHexForm((unsigned char)it);
+    // for (auto it : encryptedData) 
+    //     std::cout << IntToHexForm((unsigned char)it);
     
-    std::cout << std::endl;
+    // std::cout << std::endl;
 
-    decryptedData = AES_Decrypt(AES_256, ECB, encryptedData, key);
-    std::cout << decryptedData << std::endl;
-    std::cout << std::endl;
+    // decryptedData = AES_Decrypt(AES_256, ECB, encryptedData, key);
+    // std::cout << decryptedData << std::endl;
+    // std::cout << std::endl;
 
     
-    // 128 bit CBC mode
-    std::cout << "128 bit CBC mode" << std::endl;
-    data = "Some text to hide it from others with super security";
-    key = "my cbc key";
-    std::string IV = "init vector";
+    // // 128 bit CBC mode
+    // std::cout << "128 bit CBC mode" << std::endl;
+    // data = "Some text to hide it from others with super security";
+    // key = "my cbc key";
+    // std::string IV = "init vector";
 
-    encryptedData = AES_Encrypt(AES_128, CBC, data, key, IV);
+    // encryptedData = AES_Encrypt(AES_128, CBC, data, key, IV);
 
-    for (auto it : encryptedData) 
-        std::cout << IntToHexForm((unsigned char)it);
+    // for (auto it : encryptedData) 
+    //     std::cout << IntToHexForm((unsigned char)it);
     
-    std::cout << std::endl;
+    // std::cout << std::endl;
 
-    decryptedData = AES_Decrypt(AES_128, CBC, encryptedData, key, IV);
-    std::cout << decryptedData << std::endl;
-    std::cout << std::endl;
+    // decryptedData = AES_Decrypt(AES_128, CBC, encryptedData, key, IV);
+    // std::cout << decryptedData << std::endl;
+    // std::cout << std::endl;
 
 
-    // 192 bit CBC mode
-    std::cout << "192 bit CBC mode" << std::endl;
-    data = "Different text to hide it from others with cbc";
-    key = "my new super security key";
-    IV = "new IV";
+    // // 192 bit CBC mode
+    // std::cout << "192 bit CBC mode" << std::endl;
+    // data = "Different text to hide it from others with cbc";
+    // key = "my new super security key";
+    // IV = "new IV";
 
-    encryptedData = AES_Encrypt(AES_192, CBC, data, key, IV);
+    // encryptedData = AES_Encrypt(AES_192, CBC, data, key, IV);
 
-    for (auto it : encryptedData) 
-        std::cout << IntToHexForm((unsigned char)it);
+    // for (auto it : encryptedData) 
+    //     std::cout << IntToHexForm((unsigned char)it);
     
-    std::cout << std::endl;
+    // std::cout << std::endl;
 
-    decryptedData = AES_Decrypt(AES_192, CBC, encryptedData, key, IV);
-    std::cout << decryptedData << std::endl;
-    std::cout << std::endl;
+    // decryptedData = AES_Decrypt(AES_192, CBC, encryptedData, key, IV);
+    // std::cout << decryptedData << std::endl;
+    // std::cout << std::endl;
 
 
-    // 256 bit CBC mode
-    std::cout << "256 bit CBC mode" << std::endl;
-    data = "Sixth and third text";
-    key = "my 256 bits key with giga security";
-    IV = "Giga IV";
+    // // 256 bit CBC mode
+    // std::cout << "256 bit CBC mode" << std::endl;
+    // data = "Sixth and third text";
+    // key = "my 256 bits key with giga security";
+    // IV = "Giga IV";
 
-    encryptedData = AES_Encrypt(AES_256, CBC, data, key, IV);
+    // encryptedData = AES_Encrypt(AES_256, CBC, data, key, IV);
 
-    for (auto it : encryptedData) 
-        std::cout << IntToHexForm((unsigned char)it);
+    // for (auto it : encryptedData) 
+    //     std::cout << IntToHexForm((unsigned char)it);
     
-    std::cout << std::endl;
+    // std::cout << std::endl;
 
-    decryptedData = AES_Decrypt(AES_256, CBC, encryptedData, key, IV);
-    std::cout << decryptedData << std::endl;
-    std::cout << std::endl;
+    // decryptedData = AES_Decrypt(AES_256, CBC, encryptedData, key, IV);
+    // std::cout << decryptedData << std::endl;
+    // std::cout << std::endl;
 }
