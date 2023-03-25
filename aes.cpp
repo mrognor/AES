@@ -68,7 +68,9 @@ enum AES_Mode
 {
     ECB,
     CBC,
-    PCBC
+    PCBC,
+    CFB,
+    OFB
 };
 
 // Convert int to string with hex form of this number
@@ -392,7 +394,7 @@ inline std::string AES_EncryptStep(const std::string& data, const std::string& k
 // If the CBC mode used IV must be set
 std::string AES_Encrypt(AES_KeySize keySize, AES_Mode aes_mode, std::string data, std::string key, std::string IV = "")
 {
-    if (data.length() == 0 || key.length() == 0 || (aes_mode == CBC && IV.length() == 0)) 
+    if (data.length() == 0 || key.length() == 0 || (aes_mode != ECB && IV.length() == 0)) 
     {
         if (data.length() == 0)
             std::cerr << "In AES_Encrypt function: Data length cannot be zero" << std::endl;
@@ -431,18 +433,32 @@ std::string AES_Encrypt(AES_KeySize keySize, AES_Mode aes_mode, std::string data
         case ECB: dataChunk = data.substr(i*16, 16); break;
         case CBC: dataChunk = XorString(stateIV, data.substr(i*16, 16)); break;
         case PCBC: dataChunk = XorString(stateIV, data.substr(i*16, 16)); break;
+        case CFB: dataChunk = stateIV; break;
+        case OFB: dataChunk = stateIV; break;
         }           
 
         std::string state = AES_EncryptStep(dataChunk, keyShedule, roundsCount);
 
         switch(aes_mode)
         {
-        case ECB: break;
-        case CBC: stateIV = state; break;
-        case PCBC: stateIV = XorString(state, data.substr(i*16, 16)); break;
+        case ECB: res += state; break;
+        case CBC: 
+            stateIV = state; 
+            res += state;
+            break;
+        case PCBC: 
+            stateIV = XorString(state, data.substr(i*16, 16)); 
+            res += state;
+            break;
+        case CFB:
+            stateIV = XorString(state, data.substr(i*16, 16));
+            res += stateIV;
+            break;
+        case OFB: 
+            stateIV = state;
+            res += XorString(state, data.substr(i*16, 16));
+            break;
         }                  
-
-        res += state;
     }
 
     return res;
@@ -485,7 +501,7 @@ inline std::string AES_DecryptStep(const std::string& data, const std::string& k
 // If the CBC mode used IV must be set
 std::string AES_Decrypt(AES_KeySize keySize, AES_Mode aes_mode, std::string data, std::string key, std::string IV = "")
 {
-    if (data.length() == 0 || key.length() == 0 || (aes_mode == CBC && IV.length() == 0))
+    if (data.length() == 0 || key.length() == 0 || (aes_mode != ECB && IV.length() == 0))
     {
         if (data.length() == 0)
             std::cerr << "In AES_Decrypt function: Data length cannot be zero" << std::endl;
@@ -523,9 +539,20 @@ std::string AES_Decrypt(AES_KeySize keySize, AES_Mode aes_mode, std::string data
         case ECB: dataChunk = data.substr(i*16, 16); break;
         case CBC: dataChunk = data.substr(i*16, 16); break;
         case PCBC: dataChunk = data.substr(i*16, 16); break;
+        case CFB: dataChunk = stateIV; break;
+        case OFB: dataChunk = stateIV; break;
         }
 
-        std::string state = AES_DecryptStep(dataChunk, keyShedule, roundsCount);
+        std::string state;
+
+        switch(aes_mode)
+        {
+        case ECB: 
+        case CBC: 
+        case PCBC: state = AES_DecryptStep(dataChunk, keyShedule, roundsCount); break;
+        case CFB: 
+        case OFB: state = AES_EncryptStep(dataChunk, keyShedule, roundsCount); break;
+        }
 
         switch(aes_mode)
         {
@@ -535,8 +562,17 @@ std::string AES_Decrypt(AES_KeySize keySize, AES_Mode aes_mode, std::string data
             stateIV = data.substr(i * 16, 16); 
             break;
         case PCBC: 
-            res += XorString(stateIV, state);
-            stateIV = XorString(state, dataChunk); 
+            stateIV = XorString(stateIV, state);
+            res += stateIV;
+            stateIV = XorString(stateIV, dataChunk); 
+            break;
+        case CFB:
+            res += XorString(state, data.substr(i*16, 16));
+            stateIV = data.substr(i*16, 16);
+            break;
+        case OFB: 
+            stateIV = state;
+            res += XorString(state, data.substr(i*16, 16));
             break;
         }
     }
@@ -554,21 +590,22 @@ int main()
     // Site to check http://aes.online-domain-tools.com/
     // This site uses a different padding and if you transmit incomplete data and keys, the result of this program and the site will be different
     // AES_KeySize: AES_128, AES_192, AES_256
-    // AES_Mode: ECB, CBC
+    // AES_Mode: ECB, CBC, PCBC, CFB, OFB
 
     // 128 bit ECB mode
     std::cout << "128 bit ECB mode" << std::endl;
     std::string data = "Some text to hide it from others";
     std::string key = "my key";
+    std::string IV = "my iv";
 
-    std::string encryptedData = AES_Encrypt(AES_128, PCBC, data, key);
+    std::string encryptedData = AES_Encrypt(AES_128, OFB, data, key, IV);
 
     for (auto it : encryptedData) 
         std::cout << IntToHexForm((unsigned char)it);
     
     std::cout << std::endl;
 
-    std::string decryptedData = AES_Decrypt(AES_128, PCBC, encryptedData, key);
+    std::string decryptedData = AES_Decrypt(AES_128, OFB, encryptedData, key, IV);
     std::cout << decryptedData << std::endl;
     std::cout << std::endl;
 
