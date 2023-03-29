@@ -87,22 +87,31 @@ std::string IntToHexForm(T a)
         int highByte = a % 16;
         a /= 16;
 
-        if (lowByte > 9)
-            res = std::string(1, 'a' + lowByte - 10) + res;
-        else
-            res = std::to_string(lowByte) + res;
-
         if (highByte > 9)
-            res = std::string(1, 'a' + highByte - 10) + res;
+            res += 'a' + highByte - 10;
         else
-            res = std::to_string(highByte) + res;
+            res += std::to_string(highByte);
+
+        if (lowByte > 9)
+            res += 'a' + lowByte - 10;
+        else
+            res += std::to_string(lowByte);
     }
 
     return res;
 }
 
+// Convert plain text to hex text
+std::string RegularStringToHexRepresentation(const std::string& str)
+{
+    std::string res;
+    for (auto it : str) 
+        res += IntToHexForm((unsigned char)it);
+    return res;
+}
+
 // Convert hex to plain text
-std::string StringWithHexToNormalString(const std::string& str)
+std::string HexRepresentationToRegularString(const std::string& str)
 {
     if (str.length() % 2 != 0)  return "";
 
@@ -592,6 +601,11 @@ int main()
     // AES_KeySize: AES_128, AES_192, AES_256
     // AES_Mode: ECB, CBC, PCBC, CFB, OFB
 
+    // The function AES_Encrypt returns the result of encryption in a string in base256 representation. 
+    // To transfer encrypted data outside the code, you can use a string in hex representation. 
+    // There is a function for this: RegularStringToHexRepresentation
+    // To work with data in hex representation, use the function HexRepresentationToRegularString
+
     // 128 bit ECB mode
     std::cout << "128 bit ECB mode" << std::endl;
     std::string data = "Some text to hide it from others";
@@ -600,10 +614,7 @@ int main()
 
     std::string encryptedData = AES_Encrypt(AES_128, OFB, data, key, IV);
 
-    for (auto it : encryptedData) 
-        std::cout << IntToHexForm((unsigned char)it);
-    
-    std::cout << std::endl;
+    std::cout << RegularStringToHexRepresentation(encryptedData) << std::endl;
 
     std::string decryptedData = AES_Decrypt(AES_128, OFB, encryptedData, key, IV);
     std::cout << decryptedData << std::endl;
