@@ -1,6 +1,8 @@
 #include <iostream>
 #include <string>
 
+#include "base64.h"
+
 // Matrix for replacing two-byte words in a function SubBytes
 const unsigned char SBox[64][64] = { 
     {0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76},
@@ -592,9 +594,8 @@ std::string AES_Decrypt(AES_KeySize keySize, AES_Mode aes_mode, std::string data
 int main()
 {
     // To-Do 
-    // 1. Functions to work with base64
-    // 2. Cypher files
-    // 3. Multithreading
+    // 1. Cypher files
+    // 2. Multithreading
 
     // Site to check http://aes.online-domain-tools.com/
     // This site uses a different padding and if you transmit incomplete data and keys, the result of this program and the site will be different
@@ -602,10 +603,11 @@ int main()
     // AES_Mode: ECB, CBC, PCBC, CFB, OFB
 
     // The function AES_Encrypt returns the result of encryption in a string in base256 representation. 
-    // To transfer encrypted data outside the code, you can use a string in hex representation. 
-    // There is a function for this: RegularStringToHexRepresentation
+    // To transfer encrypted data outside the code, you can use a string in hex representation or in base64 representation
+    // There is a function for this: RegularStringToHexRepresentation or RegularStringToBase64String
     // To work with data in hex representation, use the function HexRepresentationToRegularString
-
+    // To work with data in base64 representation use the function Base64StringToRegularString
+    
     // 128 bit ECB mode
     std::cout << "128 bit ECB mode" << std::endl;
     std::string data = "Some text to hide it from others";
@@ -621,21 +623,18 @@ int main()
     std::cout << std::endl;
 
 
-    // // 192 bit ECB mode
-    // std::cout << "192 bit ECB mode" << std::endl;
-    // data = "Different text to hide it from others";
-    // key = "my new key";
+    // 192 bit ECB mode
+    std::cout << "192 bit ECB mode" << std::endl;
+    data = "Different text to hide it from others";
+    key = "my new key";
 
-    // encryptedData = AES_Encrypt(AES_192, ECB, data, key);
-
-    // for (auto it : encryptedData) 
-    //     std::cout << IntToHexForm((unsigned char)it);
+    encryptedData = RegularStringToBase64String(AES_Encrypt(AES_192, ECB, data, key));
     
-    // std::cout << std::endl;
+    std::cout << encryptedData << std::endl;
 
-    // decryptedData = AES_Decrypt(AES_192, ECB, encryptedData, key);
-    // std::cout << decryptedData << std::endl;
-    // std::cout << std::endl;
+    decryptedData = AES_Decrypt(AES_192, ECB, Base64StringToRegularString(encryptedData), key);
+    std::cout << decryptedData << std::endl;
+    std::cout << std::endl;
 
 
     // // 256 bit ECB mode
