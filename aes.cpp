@@ -1,10 +1,11 @@
 #include <iostream>
 #include <string>
+#include <fstream>
 
 #include "base64.h"
 
 // Matrix for replacing two-byte words in a function SubBytes
-const unsigned char SBox[64][64] = { 
+const unsigned char SBox[64][64] = {
     {0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76},
     {0xca, 0x82, 0xc9, 0x7d, 0xfa, 0x59, 0x47, 0xf0, 0xad, 0xd4, 0xa2, 0xaf, 0x9c, 0xa4, 0x72, 0xc0},
     {0xb7, 0xfd, 0x93, 0x26, 0x36, 0x3f, 0xf7, 0xcc, 0x34, 0xa5, 0xe5, 0xf1, 0x71, 0xd8, 0x31, 0x15},
@@ -80,12 +81,12 @@ template <class T>
 std::string IntToHexForm(T a)
 {
     std::string res;
-    
+
     for (int i = 0; i < sizeof(T); i++)
     {
         int lowByte = a % 16;
         a /= 16;
-        
+
         int highByte = a % 16;
         a /= 16;
 
@@ -107,7 +108,7 @@ std::string IntToHexForm(T a)
 std::string RegularStringToHexRepresentation(const std::string& str)
 {
     std::string res;
-    for (auto it : str) 
+    for (auto it : str)
         res += IntToHexForm((unsigned char)it);
     return res;
 }
@@ -129,7 +130,7 @@ std::string HexRepresentationToRegularString(const std::string& str)
         if (str[i + 1] >= 'a' && str[i + 1] <= 'f') low = str[i + 1] - 'a' + 10;
         if (str[i + 1] >= 'A' && str[i + 1] <= 'F') low = str[i + 1] - 'A' + 10;
 
-        res += hi*16 + low;
+        res += hi * 16 + low;
     }
     return res;
 }
@@ -142,20 +143,25 @@ inline std::string XorString(const std::string& str1, const std::string& str2)
     std::string res;
 
     for (int i = 0; i < str1.length(); i++)
-        res += str1[i]^str2[i];
-    
+        res += str1[i] ^ str2[i];
+
     return res;
-} 
+}
 
 // Add PKCS#7 padding to data string
 inline std::string AddPaddingToData(std::string data)
 {
-    std::string source = data.substr(((data.length() >> 4) << 4));
+    int dataLength;
+    if (data.length() > 16)
+        dataLength = data.substr(((data.length() >> 4) << 4)).length();
+    else
+        dataLength = data.length();
+
     std::string res;
 
-    for (int i = 0; i < (16 - source.length()); i++)
-        res += (16 - source.length());
-    
+    for (int i = 0; i < (16 - dataLength); i++)
+        res += (16 - dataLength);
+
     return data + res;
 }
 
@@ -169,7 +175,7 @@ inline std::string AddPaddingToKey(AES_KeySize keySize, std::string key)
 
     for (int i = 0; i < (keySize - key.length()); i++)
         res += (keySize - key.length());
-    
+
     return key + res;
 }
 
@@ -184,16 +190,16 @@ unsigned char GaloisMul(unsigned char a, unsigned char b)
 {
     unsigned char p = 0;
 
-    for (int counter = 0; counter < 8; counter++) 
+    for (int counter = 0; counter < 8; counter++)
     {
-        if ((b & 1) != 0) 
+        if ((b & 1) != 0)
             p ^= a;
 
         bool hi_bit_set = (a & 0x80) != 0;
 
         a <<= 1;
 
-        if (hi_bit_set) 
+        if (hi_bit_set)
             a ^= 0x1B; /* x^8 + x^4 + x^3 + x + 1 */
 
         b >>= 1;
@@ -203,53 +209,53 @@ unsigned char GaloisMul(unsigned char a, unsigned char b)
 }
 
 // Process 16 bytes in 4x4 matrix with unsigned chars. Change unsigned chars to chars from const SBox matrix
-inline void SubBytes(unsigned char *mat)
+inline void SubBytes(unsigned char* mat)
 {
     for (int i = 0; i < 16; i++)
         mat[i] = SBox[mat[i] / 16][mat[i] % 16];
 }
 
 // Process 16 bytes in 4x4 matrix with unsigned chars. Change unsigned chars to chars from const InvSBox matrix
-inline void InvSubBytes(unsigned char *mat)
+inline void InvSubBytes(unsigned char* mat)
 {
     for (int i = 0; i < 16; i++)
         mat[i] = InvSBox[mat[i] / 16][mat[i] % 16];
 }
 
 // Process 16 bytes in 4x4 matrix with unsigned chars. Circular shift of elements to the left. 0 line << 0. 1 line << 1. 2 line << 2. 3 line << 3.
-inline void ShiftRows(unsigned char *mat)
+inline void ShiftRows(unsigned char* mat)
 {
     // Second line shifts on 1 to left
     unsigned char tmp1 = mat[4];
     mat[4] = mat[5]; mat[5] = mat[6]; mat[6] = mat[7]; mat[7] = tmp1;
 
     // Third line shifts on 2 left
-    unsigned char tmp2 = mat[9]; tmp1 = mat[8]; 
+    unsigned char tmp2 = mat[9]; tmp1 = mat[8];
     mat[8] = mat[10]; mat[9] = mat[11]; mat[10] = tmp1; mat[11] = tmp2;
 
     // Fourth line shifts on 3 left or thar equls shift on 1 right
-    tmp1 = mat[15]; 
+    tmp1 = mat[15];
     mat[15] = mat[14]; mat[14] = mat[13]; mat[13] = mat[12]; mat[12] = tmp1;
 }
 
 // Process 16 bytes in 4x4 matrix with unsigned chars. Circular shift of elements to the right. 0 line >> 0. 1 line >> 1. 2 line >> 2. 3 line >> 3.
-inline void InvShiftRows(unsigned char *mat)
+inline void InvShiftRows(unsigned char* mat)
 {
     // Second line shifts on 1 to right
     unsigned char tmp1 = mat[7];
     mat[7] = mat[6]; mat[6] = mat[5]; mat[5] = mat[4]; mat[4] = tmp1;
 
     // Third line shifts on 2 right
-    unsigned char tmp2 = mat[9]; tmp1 = mat[8]; 
+    unsigned char tmp2 = mat[9]; tmp1 = mat[8];
     mat[8] = mat[10]; mat[9] = mat[11]; mat[10] = tmp1; mat[11] = tmp2;
 
     // Fourth line shifts on 3 right or thar equls shift on 1 left
-    tmp1 = mat[12]; 
+    tmp1 = mat[12];
     mat[12] = mat[13]; mat[13] = mat[14]; mat[14] = mat[15]; mat[15] = tmp1;
 }
 
 // Process 16 bytes in 4x4 matrix with unsigned chars. Make GF(2^8) operations
-inline void MixColumns(unsigned char *mat) 
+inline void MixColumns(unsigned char* mat)
 {
     unsigned char a, b, c, d;
     // Mix every four columns
@@ -273,7 +279,7 @@ inline void MixColumns(unsigned char *mat)
 }
 
 // Process 16 bytes in 4x4 matrix with unsigned chars. Make GF(2^8) operations
-inline void InvMixColumns(unsigned char *mat) 
+inline void InvMixColumns(unsigned char* mat)
 {
     unsigned char a, b, c, d;
     // Mix every four columns
@@ -286,13 +292,13 @@ inline void InvMixColumns(unsigned char *mat)
         // 11 13 9 14
         a = GaloisMul(14, mat[i]) ^ GaloisMul(11, mat[4 + i]) ^ GaloisMul(13, mat[8 + i]) ^ GaloisMul(9, mat[12 + i]);
         b = GaloisMul(9, mat[i]) ^ GaloisMul(14, mat[4 + i]) ^ GaloisMul(11, mat[8 + i]) ^ GaloisMul(13, mat[12 + i]);
-        c  = GaloisMul(13, mat[i]) ^ GaloisMul(9, mat[4 + i]) ^ GaloisMul(14, mat[8 + i]) ^ GaloisMul(11, mat[12 + i]);
+        c = GaloisMul(13, mat[i]) ^ GaloisMul(9, mat[4 + i]) ^ GaloisMul(14, mat[8 + i]) ^ GaloisMul(11, mat[12 + i]);
         d = GaloisMul(11, mat[i]) ^ GaloisMul(13, mat[4 + i]) ^ GaloisMul(9, mat[8 + i]) ^ GaloisMul(14, mat[12 + i]);
-        
+
         mat[i] = a;
         mat[4 + i] = b;
         mat[8 + i] = c;
-        mat[12 + i] = d;    
+        mat[12 + i] = d;
     }
 }
 
@@ -312,7 +318,7 @@ inline std::string KeyExpansion(AES_KeySize keySize, const std::string& key)
     for (int i = Nk; i < keySheduleLength; i++)
     {
         // Get previous column element
-        unsigned char w[4] = {(unsigned char)KeyShedule[i*4 - 4], (unsigned char)KeyShedule[i*4 - 3], (unsigned char)KeyShedule[i*4 - 2], (unsigned char)KeyShedule[i*4 - 1]};
+        unsigned char w[4] = { (unsigned char)KeyShedule[i * 4 - 4], (unsigned char)KeyShedule[i * 4 - 3], (unsigned char)KeyShedule[i * 4 - 2], (unsigned char)KeyShedule[i * 4 - 1] };
 
         // Check if column multiply for 4
         if (i % Nk == 0)
@@ -328,10 +334,10 @@ inline std::string KeyExpansion(AES_KeySize keySize, const std::string& key)
             w[3] = SBox[w[3] / 16][w[3] % 16];
 
             // Xoring
-            w[0] = w[0] ^ Rcon[i/Nk - 1][0] ^ KeyShedule[i*4 - Nk*4];
-            w[1] = w[1] ^ Rcon[i/Nk - 1][1] ^ KeyShedule[i*4 - Nk*4 + 1];
-            w[2] = w[2] ^ Rcon[i/Nk - 1][2] ^ KeyShedule[i*4 - Nk*4 + 2];
-            w[3] = w[3] ^ Rcon[i/Nk - 1][3] ^ KeyShedule[i*4 - Nk*4 + 3];
+            w[0] = w[0] ^ Rcon[i / Nk - 1][0] ^ KeyShedule[i * 4 - Nk * 4];
+            w[1] = w[1] ^ Rcon[i / Nk - 1][1] ^ KeyShedule[i * 4 - Nk * 4 + 1];
+            w[2] = w[2] ^ Rcon[i / Nk - 1][2] ^ KeyShedule[i * 4 - Nk * 4 + 2];
+            w[3] = w[3] ^ Rcon[i / Nk - 1][3] ^ KeyShedule[i * 4 - Nk * 4 + 3];
         }
         else
         {
@@ -345,10 +351,10 @@ inline std::string KeyExpansion(AES_KeySize keySize, const std::string& key)
             }
 
             // Xoring
-            w[0] = w[0] ^ KeyShedule[i*4 - Nk*4];
-            w[1] = w[1] ^ KeyShedule[i*4 - Nk*4 + 1];
-            w[2] = w[2] ^ KeyShedule[i*4 - Nk*4 + 2];
-            w[3] = w[3] ^ KeyShedule[i*4 - Nk*4 + 3];
+            w[0] = w[0] ^ KeyShedule[i * 4 - Nk * 4];
+            w[1] = w[1] ^ KeyShedule[i * 4 - Nk * 4 + 1];
+            w[2] = w[2] ^ KeyShedule[i * 4 - Nk * 4 + 2];
+            w[3] = w[3] ^ KeyShedule[i * 4 - Nk * 4 + 3];
         }
 
         KeyShedule += w[0];
@@ -361,7 +367,7 @@ inline std::string KeyExpansion(AES_KeySize keySize, const std::string& key)
 }
 
 // This function simply does a bitwise xor of each element of the string mat1 with the corresponding element of the string mat2
-inline void AddRoundKey(unsigned char* state, const std::string& key) 
+inline void AddRoundKey(unsigned char* state, const std::string& key)
 {
     for (int i = 0; i < 4; i++)
         for (int j = 0; j < 4; j++)
@@ -402,14 +408,14 @@ inline std::string AES_EncryptStep(const std::string& data, const std::string& k
 
 // Encryption function. The data and key will be aligned using the algorithm PKCS#7
 // If the key is greater than the value specified in keySize, the first keySize bits or keySize/8 characters will be taken from it
-// If the CBC mode used IV must be set
+// If the any other mode than ECB set IV must be set
 std::string AES_Encrypt(AES_KeySize keySize, AES_Mode aes_mode, std::string data, std::string key, std::string IV = "")
 {
-    if (data.length() == 0 || key.length() == 0 || (aes_mode != ECB && IV.length() == 0)) 
+    if (data.length() == 0 || key.length() == 0 || (aes_mode != ECB && IV.length() == 0))
     {
         if (data.length() == 0)
             std::cerr << "In AES_Encrypt function: Data length cannot be zero" << std::endl;
-        
+
         if (key.length() == 0)
             std::cerr << "In AES_Encrypt function: Key length cannot be zero" << std::endl;
 
@@ -435,41 +441,41 @@ std::string AES_Encrypt(AES_KeySize keySize, AES_Mode aes_mode, std::string data
     std::string keyShedule = KeyExpansion(keySize, key);
     std::string res;
 
-    for(int i = 0; i < data.length() / 16; i++)
+    for (int i = 0; i < data.length() / 16; i++)
     {
         std::string dataChunk;
 
-        switch(aes_mode)
+        switch (aes_mode)
         {
-        case ECB: dataChunk = data.substr(i*16, 16); break;
-        case CBC: dataChunk = XorString(stateIV, data.substr(i*16, 16)); break;
-        case PCBC: dataChunk = XorString(stateIV, data.substr(i*16, 16)); break;
+        case ECB: dataChunk = data.substr(i * 16, 16); break;
+        case CBC: dataChunk = XorString(stateIV, data.substr(i * 16, 16)); break;
+        case PCBC: dataChunk = XorString(stateIV, data.substr(i * 16, 16)); break;
         case CFB: dataChunk = stateIV; break;
         case OFB: dataChunk = stateIV; break;
-        }           
+        }
 
         std::string state = AES_EncryptStep(dataChunk, keyShedule, roundsCount);
 
-        switch(aes_mode)
+        switch (aes_mode)
         {
         case ECB: res += state; break;
-        case CBC: 
-            stateIV = state; 
+        case CBC:
+            stateIV = state;
             res += state;
             break;
-        case PCBC: 
-            stateIV = XorString(state, data.substr(i*16, 16)); 
+        case PCBC:
+            stateIV = XorString(state, data.substr(i * 16, 16));
             res += state;
             break;
         case CFB:
-            stateIV = XorString(state, data.substr(i*16, 16));
+            stateIV = XorString(state, data.substr(i * 16, 16));
             res += stateIV;
             break;
-        case OFB: 
+        case OFB:
             stateIV = state;
-            res += XorString(state, data.substr(i*16, 16));
+            res += XorString(state, data.substr(i * 16, 16));
             break;
-        }                  
+        }
     }
 
     return res;
@@ -504,19 +510,19 @@ inline std::string AES_DecryptStep(const std::string& data, const std::string& k
     for (int j = 0; j < 4; j++)
         for (int k = 0; k < 4; k++)
             res += state[k][j];
-    
+
     return res;
 }
 
 // Encryption function. The data and key will be aligned using the algorithm PKCS#7
-// If the CBC mode used IV must be set
+// If the any other mode than ECB set IV must be set
 std::string AES_Decrypt(AES_KeySize keySize, AES_Mode aes_mode, std::string data, std::string key, std::string IV = "")
 {
     if (data.length() == 0 || key.length() == 0 || (aes_mode != ECB && IV.length() == 0))
     {
         if (data.length() == 0)
             std::cerr << "In AES_Decrypt function: Data length cannot be zero" << std::endl;
-        
+
         if (key.length() == 0)
             std::cerr << "In AES_Decrypt function: Key length cannot be zero" << std::endl;
 
@@ -541,54 +547,258 @@ std::string AES_Decrypt(AES_KeySize keySize, AES_Mode aes_mode, std::string data
     std::string keyShedule = KeyExpansion(keySize, key);
     std::string res;
 
-    for(int i = 0; i < data.length() / 16; i++)
+    for (int i = 0; i < data.length() / 16; i++)
     {
         std::string dataChunk;
 
-        switch(aes_mode)
+        switch (aes_mode)
         {
-        case ECB: dataChunk = data.substr(i*16, 16); break;
-        case CBC: dataChunk = data.substr(i*16, 16); break;
-        case PCBC: dataChunk = data.substr(i*16, 16); break;
+        case ECB: dataChunk = data.substr(i * 16, 16); break;
+        case CBC: dataChunk = data.substr(i * 16, 16); break;
+        case PCBC: dataChunk = data.substr(i * 16, 16); break;
         case CFB: dataChunk = stateIV; break;
         case OFB: dataChunk = stateIV; break;
         }
 
         std::string state;
 
-        switch(aes_mode)
+        switch (aes_mode)
         {
-        case ECB: 
-        case CBC: 
+        case ECB:
+        case CBC:
         case PCBC: state = AES_DecryptStep(dataChunk, keyShedule, roundsCount); break;
-        case CFB: 
+        case CFB:
         case OFB: state = AES_EncryptStep(dataChunk, keyShedule, roundsCount); break;
         }
 
-        switch(aes_mode)
+        switch (aes_mode)
         {
         case ECB: res += state; break;
-        case CBC: 
-            res += XorString(stateIV, state); 
-            stateIV = data.substr(i * 16, 16); 
+        case CBC:
+            res += XorString(stateIV, state);
+            stateIV = data.substr(i * 16, 16);
             break;
-        case PCBC: 
+        case PCBC:
             stateIV = XorString(stateIV, state);
             res += stateIV;
-            stateIV = XorString(stateIV, dataChunk); 
+            stateIV = XorString(stateIV, dataChunk);
             break;
         case CFB:
-            res += XorString(state, data.substr(i*16, 16));
-            stateIV = data.substr(i*16, 16);
+            res += XorString(state, data.substr(i * 16, 16));
+            stateIV = data.substr(i * 16, 16);
             break;
-        case OFB: 
+        case OFB:
             stateIV = state;
-            res += XorString(state, data.substr(i*16, 16));
+            res += XorString(state, data.substr(i * 16, 16));
             break;
         }
     }
 
     return RemovePadding(res);
+}
+
+// Encryption function. The data and key will be aligned using the algorithm PKCS#7
+// If the key is greater than the value specified in keySize, the first keySize bits or keySize/8 characters will be taken from it
+// If the any other mode than ECB set IV must be set
+// Return true if encryption was succesfully, otherwise return false
+bool AES_EncryptFile(std::string sourceFileName, std::string destinationFileName, AES_KeySize keySize, AES_Mode aes_mode, std::string key, std::string IV = "")
+{
+    std::ifstream sourceFile(sourceFileName, std::ios::binary | std::ios::ate);
+    if (!sourceFile.is_open()) return false;
+
+    uint64_t fileLen = sourceFile.tellg();
+    sourceFile.seekg(0);
+
+    std::ofstream destinationFile(destinationFileName, std::ios::binary);
+    if (!destinationFile.is_open()) return false;
+
+    if (fileLen == 0 || key.length() == 0 || (aes_mode != ECB && IV.length() == 0))
+    {
+        if (fileLen == 0)
+            std::cerr << "In AES_Encrypt function: File cannot be empty" << std::endl;
+
+        if (key.length() == 0)
+            std::cerr << "In AES_Encrypt function: Key length cannot be zero" << std::endl;
+
+        if (aes_mode == CBC && IV.length() == 0)
+            std::cerr << "In AES_Encrypt function: IV(initialization vector) length cannot be zero" << std::endl;
+
+        throw;
+    }
+
+    int roundsCount;
+    switch (keySize)
+    {
+    case AES_128: roundsCount = 10; break;
+    case AES_192: roundsCount = 12; break;
+    case AES_256: roundsCount = 14; break;
+    }
+
+    key = AddPaddingToKey(keySize, key);
+    IV = AddPaddingToKey(AES_128, IV);
+
+    std::string stateIV = IV;
+    std::string keyShedule = KeyExpansion(keySize, key);
+
+    for (int i = 0; i <= fileLen / 16; i++)
+    {
+        std::string fileData;
+        char chars[16];
+
+        if (i == fileLen / 16)
+        {
+            sourceFile.read(chars, fileLen % 16);
+            fileData = std::string(chars, fileLen % 16);
+            fileData = AddPaddingToData(fileData);
+        }
+        else
+        {
+            sourceFile.read(chars, 16);
+            fileData = std::string(chars, 16);
+        }
+
+        std::string dataChunk;
+
+        switch (aes_mode)
+        {
+        case ECB: dataChunk = fileData; break;
+        case CBC: dataChunk = XorString(stateIV, fileData); break;
+        case PCBC: dataChunk = XorString(stateIV, fileData); break;
+        case CFB: dataChunk = stateIV; break;
+        case OFB: dataChunk = stateIV; break;
+        }
+
+        std::string state = AES_EncryptStep(dataChunk, keyShedule, roundsCount);
+
+        switch (aes_mode)
+        {
+        case ECB: destinationFile << state; break;
+        case CBC:
+            stateIV = state;
+            destinationFile << state;
+            break;
+        case PCBC:
+            stateIV = XorString(state, fileData);
+            destinationFile << state;
+            break;
+        case CFB:
+            stateIV = XorString(state, fileData);
+            destinationFile << stateIV;
+            break;
+        case OFB:
+            stateIV = state;
+            destinationFile << XorString(state, fileData);
+            break;
+        }
+    }
+
+    return true;
+}
+
+// Encryption function. The data and key will be aligned using the algorithm PKCS#7
+// If the any other mode than ECB set IV must be set
+// Return true if encryption was succesfully, otherwise return false
+bool AES_DecryptFile(std::string sourceFileName, std::string destinationFileName, AES_KeySize keySize, AES_Mode aes_mode, std::string key, std::string IV = "")
+{
+    std::ifstream sourceFile(sourceFileName, std::ios::binary | std::ios::ate);
+    if (!sourceFile.is_open()) return false;
+
+    uint64_t fileLen = sourceFile.tellg();
+    sourceFile.seekg(0);
+
+    std::ofstream destinationFile(destinationFileName, std::ios::binary);
+    if (!destinationFile.is_open()) return false;
+
+    if (fileLen == 0 || key.length() == 0 || (aes_mode != ECB && IV.length() == 0))
+    {
+        if (fileLen == 0)
+            std::cerr << "In AES_Decrypt function: File cannot be empty" << std::endl;
+
+        if (key.length() == 0)
+            std::cerr << "In AES_Decrypt function: Key length cannot be zero" << std::endl;
+
+        if (aes_mode == CBC && IV.length() == 0)
+            std::cerr << "In AES_Decrypt function: IV(initialization vector) length cannot be zero" << std::endl;
+
+        throw;
+    }
+
+    int roundsCount;
+    switch (keySize)
+    {
+    case AES_128: roundsCount = 10; break;
+    case AES_192: roundsCount = 12; break;
+    case AES_256: roundsCount = 14; break;
+    }
+
+    key = AddPaddingToKey(keySize, key);
+    IV = AddPaddingToKey(AES_128, IV);
+
+    std::string stateIV = IV;
+    std::string keyShedule = KeyExpansion(keySize, key);
+
+    for (int i = 0; i < fileLen / 16; i++)
+    {
+        char chars[16];
+        sourceFile.read(chars, 16);
+        std::string fileData = std::string(chars, 16);
+
+        std::string dataChunk;
+        std::string writingData;
+
+        switch (aes_mode)
+        {
+        case ECB: dataChunk = fileData; break;
+        case CBC: dataChunk = fileData; break;
+        case PCBC: dataChunk = fileData; break;
+        case CFB: dataChunk = stateIV; break;
+        case OFB: dataChunk = stateIV; break;
+        }
+
+        std::string state;
+
+        switch (aes_mode)
+        {
+        case ECB:
+        case CBC:
+        case PCBC: state = AES_DecryptStep(dataChunk, keyShedule, roundsCount); break;
+        case CFB:
+        case OFB: state = AES_EncryptStep(dataChunk, keyShedule, roundsCount); break;
+        }
+
+        switch (aes_mode)
+        {
+        case ECB: writingData = state; break;
+        case CBC:
+            writingData = XorString(stateIV, state);
+            stateIV = fileData;
+            break;
+        case PCBC:
+            stateIV = XorString(stateIV, state);
+            writingData = stateIV;
+            stateIV = XorString(stateIV, dataChunk);
+            break;
+        case CFB:
+            writingData = XorString(state, fileData);
+            stateIV = fileData;
+            break;
+        case OFB:
+            stateIV = state;
+            writingData = XorString(state, fileData);
+            break;
+        }
+
+        if (i == (fileLen - 16) / 16)
+        {
+            writingData = RemovePadding(writingData);
+            if (writingData.length() != 0)
+                destinationFile << writingData;
+        }
+        else
+            destinationFile << writingData;
+    }
+
+    return true;
 }
 
 int main()
@@ -607,21 +817,20 @@ int main()
     // There is a function for this: RegularStringToHexRepresentation or RegularStringToBase64String
     // To work with data in hex representation, use the function HexRepresentationToRegularString
     // To work with data in base64 representation use the function Base64StringToRegularString
-    
-    // 128 bit ECB mode
-    std::cout << "128 bit ECB mode" << std::endl;
+
+    // 128 bit CBC mode
+    std::cout << "128 bit CBC mode" << std::endl;
     std::string data = "Some text to hide it from others";
     std::string key = "my key";
     std::string IV = "my iv";
 
-    std::string encryptedData = AES_Encrypt(AES_128, OFB, data, key, IV);
+    std::string encryptedData = AES_Encrypt(AES_128, CBC, data, key, IV);
 
     std::cout << RegularStringToHexRepresentation(encryptedData) << std::endl;
 
-    std::string decryptedData = AES_Decrypt(AES_128, OFB, encryptedData, key, IV);
+    std::string decryptedData = AES_Decrypt(AES_128, CBC, encryptedData, key, IV);
     std::cout << decryptedData << std::endl;
     std::cout << std::endl;
-
 
     // 192 bit ECB mode
     std::cout << "192 bit ECB mode" << std::endl;
@@ -636,6 +845,15 @@ int main()
     std::cout << decryptedData << std::endl;
     std::cout << std::endl;
 
+    // File encryption
+    std::cout << "File encryption: base64.cpp to base64.enc" << std::endl;
+    if (!AES_EncryptFile("base64.cpp", "base64.enc", AES_256, CFB, "file key", "file iv"))
+        std::cout << "Failed to create file" << std::endl;
+
+    // File decryption
+    std::cout << "File decryption: base64.enc to base64.dec" << std::endl;
+    if (!AES_DecryptFile("base64.enc", "base64.dec", AES_256, CFB, "file key", "file iv"))
+        std::cout << "Failed to create file" << std::endl;
 
     // // 256 bit ECB mode
     // std::cout << "256 bit ECB mode" << std::endl;
@@ -646,14 +864,14 @@ int main()
 
     // for (auto it : encryptedData) 
     //     std::cout << IntToHexForm((unsigned char)it);
-    
+
     // std::cout << std::endl;
 
     // decryptedData = AES_Decrypt(AES_256, ECB, encryptedData, key);
     // std::cout << decryptedData << std::endl;
     // std::cout << std::endl;
 
-    
+
     // // 128 bit CBC mode
     // std::cout << "128 bit CBC mode" << std::endl;
     // data = "Some text to hide it from others with super security";
@@ -664,7 +882,7 @@ int main()
 
     // for (auto it : encryptedData) 
     //     std::cout << IntToHexForm((unsigned char)it);
-    
+
     // std::cout << std::endl;
 
     // decryptedData = AES_Decrypt(AES_128, CBC, encryptedData, key, IV);
@@ -682,7 +900,7 @@ int main()
 
     // for (auto it : encryptedData) 
     //     std::cout << IntToHexForm((unsigned char)it);
-    
+
     // std::cout << std::endl;
 
     // decryptedData = AES_Decrypt(AES_192, CBC, encryptedData, key, IV);
@@ -700,7 +918,7 @@ int main()
 
     // for (auto it : encryptedData) 
     //     std::cout << IntToHexForm((unsigned char)it);
-    
+
     // std::cout << std::endl;
 
     // decryptedData = AES_Decrypt(AES_256, CBC, encryptedData, key, IV);
