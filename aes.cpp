@@ -93,12 +93,12 @@ std::string IntToHexForm(T a)
         if (highByte > 9)
             res += 'a' + highByte - 10;
         else
-            res += std::to_string(highByte);
+            res += '0' + highByte;
 
         if (lowByte > 9)
             res += 'a' + lowByte - 10;
         else
-            res += std::to_string(lowByte);
+            res += '0' + lowByte;
     }
 
     return res;
