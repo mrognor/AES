@@ -148,21 +148,17 @@ inline std::string XorString(const std::string& str1, const std::string& str2)
     return res;
 }
 
-// Add PKCS#7 padding to data string
-inline std::string AddPaddingToData(std::string data)
+// Calculate PKCS#7 padding to data string
+inline std::string CalculateDataPadding(const std::string& data)
 {
-    int dataLength;
-    if (data.length() > 16)
-        dataLength = data.substr(((data.length() >> 4) << 4)).length();
-    else
-        dataLength = data.length();
+    int paddingLength = 16 - (data.length() % 16);
 
     std::string res;
 
-    for (int i = 0; i < (16 - dataLength); i++)
-        res += (16 - dataLength);
+    for (int i = 0; i < paddingLength; i++)
+        res += paddingLength;
 
-    return data + res;
+    return res;
 }
 
 // Add PKCS#7 padding to key string
@@ -180,9 +176,10 @@ inline std::string AddPaddingToKey(AES_KeySize keySize, std::string key)
 }
 
 // Remove PKCS#7 padding from string
-inline std::string RemovePadding(std::string str)
+inline void RemovePaddingFromData(std::string& str)
 {
-    return str.substr(0, str.length() - (unsigned char)str[str.length() - 1]);
+    unsigned char paddingLength = str.back();
+    for (int i = 0; i < paddingLength; ++i) str.pop_back();
 }
 
 // Galois Field (256) multiplication of two bytes
@@ -409,7 +406,7 @@ inline std::string AES_EncryptStep(const std::string& data, const std::string& k
 // Encryption function. The data and key will be aligned using the algorithm PKCS#7
 // If the key is greater than the value specified in keySize, the first keySize bits or keySize/8 characters will be taken from it
 // If the any other mode than ECB set IV must be set
-std::string AES_Encrypt(AES_KeySize keySize, AES_Mode aes_mode, std::string data, std::string key, std::string IV = "")
+std::string AES_Encrypt(AES_KeySize keySize, AES_Mode aes_mode, const std::string& data, std::string key, std::string IV = "")
 {
     if (data.length() == 0 || key.length() == 0 || (aes_mode != ECB && IV.length() == 0))
     {
@@ -433,7 +430,6 @@ std::string AES_Encrypt(AES_KeySize keySize, AES_Mode aes_mode, std::string data
     case AES_256: roundsCount = 14; break;
     }
 
-    data = AddPaddingToData(data);
     key = AddPaddingToKey(keySize, key);
     IV = AddPaddingToKey(AES_128, IV);
 
@@ -441,15 +437,21 @@ std::string AES_Encrypt(AES_KeySize keySize, AES_Mode aes_mode, std::string data
     std::string keyShedule = KeyExpansion(keySize, key);
     std::string res;
 
-    for (int i = 0; i < data.length() / 16; i++)
-    {
+    for (int i = 0; i <= data.length() / 16; i++)
+    {   
+        std::string cycleData; 
         std::string dataChunk;
+
+        if (i == data.length() / 16)
+            cycleData = data.substr(i * 16) + CalculateDataPadding(data);
+        else
+            cycleData = data.substr(i * 16, 16);
 
         switch (aes_mode)
         {
-        case ECB: dataChunk = data.substr(i * 16, 16); break;
-        case CBC: dataChunk = XorString(stateIV, data.substr(i * 16, 16)); break;
-        case PCBC: dataChunk = XorString(stateIV, data.substr(i * 16, 16)); break;
+        case ECB: dataChunk = cycleData; break;
+        case CBC: dataChunk = XorString(stateIV, cycleData); break;
+        case PCBC: dataChunk = XorString(stateIV, cycleData); break;
         case CFB: dataChunk = stateIV; break;
         case OFB: dataChunk = stateIV; break;
         }
@@ -464,16 +466,16 @@ std::string AES_Encrypt(AES_KeySize keySize, AES_Mode aes_mode, std::string data
             res += state;
             break;
         case PCBC:
-            stateIV = XorString(state, data.substr(i * 16, 16));
+            stateIV = XorString(state, cycleData);
             res += state;
             break;
         case CFB:
-            stateIV = XorString(state, data.substr(i * 16, 16));
+            stateIV = XorString(state, cycleData);
             res += stateIV;
             break;
         case OFB:
             stateIV = state;
-            res += XorString(state, data.substr(i * 16, 16));
+            res += XorString(state, cycleData);
             break;
         }
     }
@@ -516,7 +518,7 @@ inline std::string AES_DecryptStep(const std::string& data, const std::string& k
 
 // Encryption function. The data and key will be aligned using the algorithm PKCS#7
 // If the any other mode than ECB set IV must be set
-std::string AES_Decrypt(AES_KeySize keySize, AES_Mode aes_mode, std::string data, std::string key, std::string IV = "")
+std::string AES_Decrypt(AES_KeySize keySize, AES_Mode aes_mode, const std::string& data, std::string key, std::string IV = "")
 {
     if (data.length() == 0 || key.length() == 0 || (aes_mode != ECB && IV.length() == 0))
     {
@@ -549,13 +551,14 @@ std::string AES_Decrypt(AES_KeySize keySize, AES_Mode aes_mode, std::string data
 
     for (int i = 0; i < data.length() / 16; i++)
     {
+        std::string cycleData = data.substr(i * 16, 16);
         std::string dataChunk;
 
         switch (aes_mode)
         {
-        case ECB: dataChunk = data.substr(i * 16, 16); break;
-        case CBC: dataChunk = data.substr(i * 16, 16); break;
-        case PCBC: dataChunk = data.substr(i * 16, 16); break;
+        case ECB: dataChunk = cycleData; break;
+        case CBC: dataChunk = cycleData; break;
+        case PCBC: dataChunk = cycleData; break;
         case CFB: dataChunk = stateIV; break;
         case OFB: dataChunk = stateIV; break;
         }
@@ -576,7 +579,7 @@ std::string AES_Decrypt(AES_KeySize keySize, AES_Mode aes_mode, std::string data
         case ECB: res += state; break;
         case CBC:
             res += XorString(stateIV, state);
-            stateIV = data.substr(i * 16, 16);
+            stateIV = cycleData;
             break;
         case PCBC:
             stateIV = XorString(stateIV, state);
@@ -584,17 +587,18 @@ std::string AES_Decrypt(AES_KeySize keySize, AES_Mode aes_mode, std::string data
             stateIV = XorString(stateIV, dataChunk);
             break;
         case CFB:
-            res += XorString(state, data.substr(i * 16, 16));
-            stateIV = data.substr(i * 16, 16);
+            res += XorString(state, cycleData);
+            stateIV = cycleData;
             break;
         case OFB:
             stateIV = state;
-            res += XorString(state, data.substr(i * 16, 16));
+            res += XorString(state, cycleData);
             break;
         }
     }
 
-    return RemovePadding(res);
+    RemovePaddingFromData(res);
+    return res;
 }
 
 // Encryption function. The data and key will be aligned using the algorithm PKCS#7
@@ -640,7 +644,7 @@ bool AES_EncryptFile(std::string sourceFileName, std::string destinationFileName
     std::string stateIV = IV;
     std::string keyShedule = KeyExpansion(keySize, key);
 
-    for (int i = 0; i <= fileLen / 16; i++)
+    for (int i = 0; i <= fileLen / 16; ++i)
     {
         std::string fileData;
         char chars[16];
@@ -649,7 +653,7 @@ bool AES_EncryptFile(std::string sourceFileName, std::string destinationFileName
         {
             sourceFile.read(chars, fileLen % 16);
             fileData = std::string(chars, fileLen % 16);
-            fileData = AddPaddingToData(fileData);
+            fileData += CalculateDataPadding(fileData);
         }
         else
         {
@@ -790,7 +794,7 @@ bool AES_DecryptFile(std::string sourceFileName, std::string destinationFileName
 
         if (i == (fileLen - 16) / 16)
         {
-            writingData = RemovePadding(writingData);
+            RemovePaddingFromData(writingData);
             if (writingData.length() != 0)
                 destinationFile << writingData;
         }
@@ -853,6 +857,16 @@ int main()
     // File decryption
     std::cout << "File decryption: base64.enc to base64.dec" << std::endl;
     if (!AES_DecryptFile("base64.enc", "base64.dec", AES_256, CFB, "file key", "file iv"))
+        std::cout << "Failed to create file" << std::endl;
+
+    // File encryption
+    std::cout << "File encryption: aes.cpp to aes.enc" << std::endl;
+    if (!AES_EncryptFile("aes.cpp", "aes.enc", AES_128, CBC, "file key", "file iv"))
+        std::cout << "Failed to create file" << std::endl;
+
+    // File decryption
+    std::cout << "File decryption: aes.enc to aes.dec" << std::endl;
+    if (!AES_DecryptFile("aes.enc", "aes.dec", AES_128, CBC, "file key", "file iv"))
         std::cout << "Failed to create file" << std::endl;
 
     // // 256 bit ECB mode
