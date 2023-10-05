@@ -1,10 +1,22 @@
 #include "base64.h"
 
-unsigned char FindInSymbols(unsigned char c)
+unsigned char ConvertSymbol(unsigned char c)
 {
-    for (int i = 0; i < 64; ++i)
-        if (c == Symbols[i])
-            return i;
+    if (c >= 48 && c <= 57)
+        return c += 4; // -48 + 26*2
+
+    if (c >= 65 && c <= 90)
+        return c -= 65;
+
+    if (c >= 97 && c <= 122)
+        return (c -= 71); // 97 - 26
+
+    if (c == '+')
+        return 62;
+    
+    if (c == '/')
+        return 63;
+
     return 0;
 }
 
@@ -46,17 +58,17 @@ std::string Base64StringToRegularString(const std::string& str)
     
     for (uint64_t i = 0; i <= str.length() - 4; i += 4)
     {
-        res += ((FindInSymbols(str[i]) << 2) + (FindInSymbols(str[i + 1]) >> 4));
+        res += ((ConvertSymbol(str[i]) << 2) + (ConvertSymbol(str[i + 1]) >> 4));
 
         if (str[i + 2] == '=')
             break;
         else
-            res += (((FindInSymbols(str[i + 1]) & 0b00001111) << 4) + (FindInSymbols(str[i + 2]) >> 2));
+            res += (((ConvertSymbol(str[i + 1]) & 0b00001111) << 4) + (ConvertSymbol(str[i + 2]) >> 2));
 
         if (str[i + 3] == '=')
             break;
         else
-            res += (((FindInSymbols(str[i + 2]) & 0b00000011) << 6) + FindInSymbols(str[i + 3]));
+            res += (((ConvertSymbol(str[i + 2]) & 0b00000011) << 6) + ConvertSymbol(str[i + 3]));
     }
 
     return res;

@@ -7,7 +7,7 @@ const unsigned char Symbols[64] = {
     'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+', '/'
 };
 
-unsigned char FindInSymbols(unsigned char c);
+unsigned char ConvertSymbol(unsigned char c);
 
 std::string RegularStringToBase64String(const std::string& str);
 
