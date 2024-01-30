@@ -1,4 +1,5 @@
 #include <iostream>
+#include <cstdint>
 
 const unsigned char Symbols[64] = {
     'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',

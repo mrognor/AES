@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 #include <fstream>
+#include <cstdint>
 
 #include "base64.h"
 
@@ -408,11 +409,8 @@ inline std::string AES_EncryptStep(const std::string& data, const std::string& k
 // If the any other mode than ECB set IV must be set
 std::string AES_Encrypt(AES_KeySize keySize, AES_Mode aes_mode, const std::string& data, std::string key, std::string IV = "")
 {
-    if (data.length() == 0 || key.length() == 0 || (aes_mode != ECB && IV.length() == 0))
+    if (key.length() == 0 || (aes_mode != ECB && IV.length() == 0))
     {
-        if (data.length() == 0)
-            std::cerr << "In AES_Encrypt function: Data length cannot be zero" << std::endl;
-
         if (key.length() == 0)
             std::cerr << "In AES_Encrypt function: Key length cannot be zero" << std::endl;
 
@@ -420,6 +418,12 @@ std::string AES_Encrypt(AES_KeySize keySize, AES_Mode aes_mode, const std::strin
             std::cerr << "In AES_Encrypt function: IV(initialization vector) length cannot be zero" << std::endl;
 
         throw;
+    }
+
+    if (data.length() == 0)
+    {
+        std::cerr << "In AES_Encrypt function: Data length cannot be zero" << std::endl;
+        return "";
     }
 
     int roundsCount;
@@ -520,11 +524,8 @@ inline std::string AES_DecryptStep(const std::string& data, const std::string& k
 // If the any other mode than ECB set IV must be set
 std::string AES_Decrypt(AES_KeySize keySize, AES_Mode aes_mode, const std::string& data, std::string key, std::string IV = "")
 {
-    if (data.length() == 0 || key.length() == 0 || (aes_mode != ECB && IV.length() == 0))
+    if (key.length() == 0 || (aes_mode != ECB && IV.length() == 0))
     {
-        if (data.length() == 0)
-            std::cerr << "In AES_Decrypt function: Data length cannot be zero" << std::endl;
-
         if (key.length() == 0)
             std::cerr << "In AES_Decrypt function: Key length cannot be zero" << std::endl;
 
@@ -532,6 +533,12 @@ std::string AES_Decrypt(AES_KeySize keySize, AES_Mode aes_mode, const std::strin
             std::cerr << "In AES_Decrypt function: IV(initialization vector) length cannot be zero" << std::endl;
 
         throw;
+    }
+
+    if (data.length() == 0)
+    {
+        std::cerr << "In AES_Decrypt function: Data length cannot be zero" << std::endl;
+        return "";
     }
 
     int roundsCount;
@@ -610,17 +617,14 @@ bool AES_EncryptFile(std::string sourceFileName, std::string destinationFileName
     std::ifstream sourceFile(sourceFileName, std::ios::binary | std::ios::ate);
     if (!sourceFile.is_open()) return false;
 
-    uint64_t fileLen = sourceFile.tellg();
+    std::uint64_t fileLen = sourceFile.tellg();
     sourceFile.seekg(0);
 
     std::ofstream destinationFile(destinationFileName, std::ios::binary);
     if (!destinationFile.is_open()) return false;
 
-    if (fileLen == 0 || key.length() == 0 || (aes_mode != ECB && IV.length() == 0))
+    if (key.length() == 0 || (aes_mode != ECB && IV.length() == 0))
     {
-        if (fileLen == 0)
-            std::cerr << "In AES_Encrypt function: File cannot be empty" << std::endl;
-
         if (key.length() == 0)
             std::cerr << "In AES_Encrypt function: Key length cannot be zero" << std::endl;
 
@@ -628,6 +632,12 @@ bool AES_EncryptFile(std::string sourceFileName, std::string destinationFileName
             std::cerr << "In AES_Encrypt function: IV(initialization vector) length cannot be zero" << std::endl;
 
         throw;
+    }
+
+    if (fileLen == 0)
+    {
+        std::cerr << "In AES_Encrypt function: File cannot be empty" << std::endl;
+        return false;
     }
 
     int roundsCount;
@@ -707,17 +717,14 @@ bool AES_DecryptFile(std::string sourceFileName, std::string destinationFileName
     std::ifstream sourceFile(sourceFileName, std::ios::binary | std::ios::ate);
     if (!sourceFile.is_open()) return false;
 
-    uint64_t fileLen = sourceFile.tellg();
+    std::uint64_t fileLen = sourceFile.tellg();
     sourceFile.seekg(0);
 
     std::ofstream destinationFile(destinationFileName, std::ios::binary);
     if (!destinationFile.is_open()) return false;
 
-    if (fileLen == 0 || key.length() == 0 || (aes_mode != ECB && IV.length() == 0))
+    if (key.length() == 0 || (aes_mode != ECB && IV.length() == 0))
     {
-        if (fileLen == 0)
-            std::cerr << "In AES_Decrypt function: File cannot be empty" << std::endl;
-
         if (key.length() == 0)
             std::cerr << "In AES_Decrypt function: Key length cannot be zero" << std::endl;
 
@@ -725,6 +732,12 @@ bool AES_DecryptFile(std::string sourceFileName, std::string destinationFileName
             std::cerr << "In AES_Decrypt function: IV(initialization vector) length cannot be zero" << std::endl;
 
         throw;
+    }
+
+    if (fileLen == 0)
+    {
+        std::cerr << "In AES_Decrypt function: File cannot be empty" << std::endl;
+        return false;
     }
 
     int roundsCount;

@@ -26,7 +26,7 @@ std::string RegularStringToBase64String(const std::string& str)
 
     if (str.length() >= 3)
     {
-        for (uint64_t i = 0; i <= str.length() - 3; i += 3)
+        for (std::uint64_t i = 0; i <= str.length() - 3; i += 3)
         {
             res += Symbols[(unsigned char)str[i] >> 2];
             res += Symbols[(((unsigned char)str[i] & 0b00000011) << 4) + ((unsigned char)str[i + 1] >> 4)];
@@ -56,7 +56,7 @@ std::string Base64StringToRegularString(const std::string& str)
 {
     std::string res;
     
-    for (uint64_t i = 0; i <= str.length() - 4; i += 4)
+    for (std::uint64_t i = 0; i <= str.length() - 4; i += 4)
     {
         res += ((ConvertSymbol(str[i]) << 2) + (ConvertSymbol(str[i + 1]) >> 4));
 
